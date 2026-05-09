@@ -1,14 +1,19 @@
 import React from 'react';
 import { Text, Box, useApp } from 'ink';
 import chalk from 'chalk';
-import { TIERS, LOG_MAX_ENTRIES } from './config.js';
+import { TIERS, LOG_MAX_ENTRIES, STORAGE_TIERS } from './config.js';
 import { formatNumber, formatMoney, formatPageNumber, formatPagesPerSecond, wrapText } from './format.js';
-import { getWorkerCost, purchaseWorker } from './game.js';
+import { getWorkerCost } from './config.js';
+import { computeStorageScale } from './storageScale.js';
 
 /**
  * StatsPanel — displays total pages, money, and pages/sec.
  */
-export function StatsPanel({ pagesGenerated, currentPage, money, pagesPerSecond }) {
+export function StatsPanel({ pagesGenerated, currentPage, money, pagesPerSecond, tickRateLevel, tickRateCost }) {
+  const tickInterval = Math.max(33, Math.round(1000 - tickRateLevel * 50));
+  const tickRate = (1000 / tickInterval).toFixed(1);
+  const canAfford = money >= tickRateCost;
+
   return (
     <Box flexDirection="column" borderColor="blue" borderStyle="single" paddingX={1}>
       <Text bold>{chalk.blue('📖 THE LIBRARY OF BABEL')}</Text>
@@ -27,6 +32,17 @@ export function StatsPanel({ pagesGenerated, currentPage, money, pagesPerSecond 
       <Box>
         <Text bold>{chalk.gray('Pages/sec:')}</Text>
         <Text> {formatPagesPerSecond(pagesPerSecond)}</Text>
+      </Box>
+      <Box>
+        <Text bold color={canAfford ? 'green' : 'gray'}>
+          Tick rate: {tickRate}/s{' '}
+        </Text>
+        {tickRateLevel > 0 && <Text dim>(level {tickRateLevel})</Text>}
+      </Box>
+      <Box>
+        <Text color={canAfford ? 'green' : 'gray'}>
+          Upgrade: {formatMoney(tickRateCost)} [U]
+        </Text>
       </Box>
     </Box>
   );
@@ -116,6 +132,27 @@ export function LogPanel({ log }) {
           </Text>
         ))
       )}
+    </Box>
+  );
+}
+
+/**
+ * StorageScalePanel — displays total pages as escalating storage tiers.
+ */
+export function StorageScalePanel({ pagesGenerated }) {
+  const scale = computeStorageScale(pagesGenerated);
+
+  return (
+    <Box flexDirection="column" borderColor="cyan" borderStyle="single" paddingX={1}>
+      <Text bold>{chalk.cyan('📦 Storage Scale')}</Text>
+      {scale.map((tier, i) => (
+        <Box key={tier.name} flexDirection="column" marginTop={i > 0 ? 0.5 : 0}>
+          <Text color="gray">
+            {tier.emoji} {tier.name.padEnd(25)}{' '}
+            <Text color="white">{formatNumber(Number(tier.count))}</Text>
+          </Text>
+        </Box>
+      ))}
     </Box>
   );
 }

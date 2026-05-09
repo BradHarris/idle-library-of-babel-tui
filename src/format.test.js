@@ -38,8 +38,12 @@ test('formatNumber 1000000000001', formatNumber, [1000000000001], '1.00T');
 // formatMoney tests
 test('formatMoney 0', formatMoney, [0], '$0');
 test('formatMoney 42', formatMoney, [42], '$42');
+test('formatMoney 999', formatMoney, [999], '$999');
+test('formatMoney 1000', formatMoney, [1000], '$1.00K');
 test('formatMoney 1500', formatMoney, [1500], '$1.50K');
 test('formatMoney 10000', formatMoney, [10000], '$10.00K');
+test('formatMoney 1500000', formatMoney, [1500000], '$1.50M');
+test('formatMoney large', formatMoney, [99999999999999999999], '$1.00e+20');
 
 // formatPageNumber tests
 test('formatPageNumber 0n', formatPageNumber, [0n], '0');

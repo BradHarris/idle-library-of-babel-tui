@@ -1,104 +1,70 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { render, Text, Box, useInput } from 'ink';
 import chalk from 'chalk';
-import { TIERS } from './config.js';
-import { createInitialState, tick, calcPagesPerSecond, purchaseWorkerPure, getWorkerCost } from './game.js';
-import { StatsPanel, LatestPagePanel, WorkersPanel, LogPanel } from './ui.jsx';
+import { TIERS, getWorkerCost } from './config.js';
+import { useGameStore } from './stores/gameStore.js';
+import { StatsPanel, LatestPagePanel, WorkersPanel, LogPanel, StorageScalePanel } from './ui.jsx';
+import { formatMoney, formatNumber } from './format.js';
 
 /**
  * Main App component — arranges all four panels in a grid layout.
  */
 export function App() {
-  const [gameState, setGameState] = useState(createInitialState);
-  const [terminalWidth, setTerminalWidth] = useState(Math.max(80, 120));
-  const gameStateRef = useRef(gameState);
-  const tickTimerRef = useRef(null);
-  const renderTimerRef = useRef(null);
+  const [renderTick, setRenderTick] = useState(0);
 
-  // Keep ref in sync with state for tick access
-  gameStateRef.current = gameState;
+  // Subscribe to store state via selectors
+  const pagesGenerated = useGameStore(s => s.pagesGenerated);
+  const currentPage = useGameStore(s => s.currentPage);
+  const money = useGameStore(s => s.money);
+  const workers = useGameStore(s => s.workers);
+  const log = useGameStore(s => s.log);
+  const tickRateLevel = useGameStore(s => s.tickRateLevel);
+  const tickRateCost = useGameStore(s => s.tickRateCost);
+  const pps = useGameStore(s => s.pps);
+  const canAfford = useGameStore(s => s.canAfford);
+  const tickInterval = useGameStore(s => s.tickInterval);
+  const latestPage = useGameStore(s => s.latestPage);
 
-  // Handle terminal resize
+  // Force re-render at ~100ms for smooth UI updates
   useEffect(() => {
-    const onResize = () => {
-      setTerminalWidth(process.stdout.columns || 120);
-    };
-    process.stdout.on?.('resize', onResize);
-    onResize();
-    return () => {
-      process.stdout.off?.('resize', onResize);
-    };
+    const interval = setInterval(() => setRenderTick(t => t + 1), 100);
+    return () => clearInterval(interval);
   }, []);
 
-  // Logic tick — runs at TICK_INTERVAL (50ms)
+  // Logic tick — runs at dynamic interval based on tick rate level
   useEffect(() => {
-    const TICK_INTERVAL = 50;
-    tickTimerRef.current = setInterval(() => {
-      const state = gameStateRef.current;
-      const newState = tick({ ...state });
-      setGameState(newState);
-    }, TICK_INTERVAL);
-
-    return () => {
-      if (tickTimerRef.current) {
-        clearInterval(tickTimerRef.current);
-      }
-    };
-  }, []);
-
-  // Render interval — runs at RENDER_INTERVAL (100ms)
-  const RENDER_INTERVAL = 100;
-  useEffect(() => {
-    renderTimerRef.current = setInterval(() => {
-      setGameState((prev) => ({ ...prev }));
-    }, RENDER_INTERVAL);
-
-    return () => {
-      if (renderTimerRef.current) {
-        clearInterval(renderTimerRef.current);
-      }
-    };
-  }, []);
-
-  // Graceful exit cleanup
-  useEffect(() => {
-    return () => {
-      if (tickTimerRef.current) clearInterval(tickTimerRef.current);
-      if (renderTimerRef.current) clearInterval(renderTimerRef.current);
-    };
-  }, []);
+    const interval = setInterval(() => {
+      useGameStore.getState().tick(tickInterval);
+    }, tickInterval);
+    return () => clearInterval(interval);
+  }, [tickInterval]);
 
   // Handle worker hire
   const handleHire = useCallback((tierId) => {
-    setGameState((prev) => {
-      const { state } = purchaseWorkerPure(prev, tierId);
-      return state;
-    });
+    useGameStore.getState().hire(tierId);
   }, []);
 
-  // Key input for hiring (keys 1-7)
+  // Handle tick rate upgrade purchase
+  const handleTickRateUpgrade = useCallback(() => {
+    useGameStore.getState().upgradeTickRate();
+  }, []);
+
+  // Key input for hiring (keys 1-7) and tick rate upgrade (u)
   useInput((input) => {
+    if (input === 'u') {
+      handleTickRateUpgrade();
+      return;
+    }
     const keyMap = { '1': 'writer', '2': 'manager', '3': 'overseer', '4': 'rector', '5': 'cardinal', '6': 'pope', '7': 'archbishop' };
     const tierId = keyMap[input];
     if (tierId) handleHire(tierId);
   });
 
-  // Derived values for the UI
-  const pps = calcPagesPerSecond(gameState.workers);
-
-  // Calculate affordability per tier
-  const canAfford = {};
-  for (const tier of TIERS) {
-    const count = gameState.workers[tier.id] || 0;
-    const cost = getWorkerCost(tier, count);
-    canAfford[tier.id] = gameState.money >= cost;
-  }
-
   // Build key prompt string
   const keyPrompt = TIERS.map((tier, i) => {
-    const count = gameState.workers[tier.id] || 0;
+    const count = workers[tier.id] || 0;
     const cost = getWorkerCost(tier, count);
-    const can = gameState.money >= cost;
+    const can = money >= cost;
     const label = `[${i + 1}]${tier.name}`;
     return can ? label : chalk.dim(label);
   }).join('  ');
@@ -107,34 +73,47 @@ export function App() {
     <Box flexDirection="column" paddingX={1}>
       {/* Stats Panel — top */}
       <StatsPanel
-        pagesGenerated={gameState.pagesGenerated}
-        currentPage={gameState.currentPage}
-        money={gameState.money}
+        pagesGenerated={pagesGenerated}
+        currentPage={currentPage}
+        money={money}
         pagesPerSecond={pps}
+        tickRateLevel={tickRateLevel}
+        tickRateCost={tickRateCost}
       />
 
-      {/* Latest Page Panel — below stats */}
+      {/* Storage Scale Panel — below stats */}
+      <StorageScalePanel
+        pagesGenerated={pagesGenerated}
+      />
+
+      {/* Latest Page Panel — below storage scale */}
       <LatestPagePanel
-        currentPage={gameState.currentPage}
-        latestPage={gameState._latestPage || ''}
+        currentPage={currentPage}
+        latestPage={latestPage || ''}
       />
 
       {/* Workers and Log — side by side */}
       <Box marginTop={1}>
         <Box flexDirection="column" flex={1}>
           <WorkersPanel
-            workers={gameState.workers}
+            workers={workers}
             canAfford={canAfford}
           />
         </Box>
         <Box marginLeft={1} flex={1}>
-          <LogPanel log={gameState.log} />
+          <LogPanel log={log} />
         </Box>
       </Box>
 
       <Box marginTop={1} flexDirection="column">
         <Text dim>{keyPrompt}</Text>
-        <Text dim>  Press Ctrl+C to quit</Text>
+        <Text dim>
+          {money >= tickRateCost
+            ? chalk.green('[U]')
+            : chalk.dim('[U]')}
+          {' '}Tick Rate Upgrade: {formatMoney(tickRateCost)}{' '}
+          <Text dim>Press Ctrl+C to quit</Text>
+        </Text>
       </Box>
     </Box>
   );
