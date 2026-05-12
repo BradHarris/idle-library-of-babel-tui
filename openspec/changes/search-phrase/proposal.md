@@ -5,14 +5,14 @@ The Library of Babel contains every possible 280-character text. Players natural
 ## What Changes
 
 - **Search hotkey**: Pressing `[S]` opens an overlay popup with a text input field for the search query.
-- **Query → Page mapping**: The search query string is deterministically hashed to a page number using SHA-256, converted to a bigint, then taken modulo 43^280 to produce a valid page address.
-- **Found/Not-found display**: If the computed page number ≤ `pagesGenerated`, the page content and its location are displayed. If the page number > `pagesGenerated`, a "not found" message is shown indicating how far into the library the phrase lies.
-- **Result display**: Found results show the 280-character page content (wrapped), the full location address (e.g., "Building 12, Floor 3, Rack 7, Server 2, Drive 0"), and the page number.
+- **Query → Page address mapping**: The search query bytes are converted to a bigint (big-endian), which serves as a page address. This address is compared against `pagesGenerated` to determine found/not-found.
+- **Found/Not-found display**: If the page address ≤ `pagesGenerated`, the page content is fetched via `generatePage(address)` and its location via `locationFromPageOffset(address)`. If the address > `pagesGenerated`, a "not found" message shows the target address and current progress.
+- **Result display**: Found results show the 280-character page content (wrapped), the formatted page address, and the full location address (e.g., "Building 12, Floor 3, Rack 7, Server 2, Drive 0").
 
 ## Capabilities
 
 ### New Capabilities
-- `phrase-search`: Deterministic mapping from text query to page address using SHA-256 hashing, with found/not-found logic based on current progress
+- `phrase-search`: Deterministic mapping from text query to page address using bigint byte conversion, with found/not-found logic based on current progress
 
 ### Modified Capabilities
 - `tui-display`: Added search overlay UI as a new panel interaction in the dashboard
