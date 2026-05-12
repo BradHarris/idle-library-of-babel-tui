@@ -2,7 +2,7 @@ import React from 'react';
 import { Text, Box, useApp } from 'ink';
 import chalk from 'chalk';
 import { TIERS, LOG_MAX_ENTRIES, STORAGE_TIERS } from './config.js';
-import { formatNumber, formatMoney, formatPageNumber, formatPagesPerSecond, wrapText } from './format.js';
+import { formatNumber, formatMoney, formatPageNumber, wrapText } from './format.js';
 import { getWorkerCost } from './config.js';
 import { computeStorageScale } from './storageScale.js';
 
@@ -31,13 +31,13 @@ export function StatsPanel({ pagesGenerated, currentPage, money, pagesPerSecond,
       </Box>
       <Box>
         <Text bold>{chalk.gray('Pages/sec:')}</Text>
-        <Text> {formatPagesPerSecond(pagesPerSecond)}</Text>
+        <Text> {formatNumber(pagesPerSecond)}</Text>
       </Box>
       <Box>
         <Text bold color={canAfford ? 'green' : 'gray'}>
           Tick rate: {tickRate}/s{' '}
         </Text>
-        {tickRateLevel > 0 && <Text dim>(level {tickRateLevel})</Text>}
+        {tickRateLevel > 0 && <Text dim>(level {formatNumber(tickRateLevel)})</Text>}
       </Box>
       <Box>
         <Text color={canAfford ? 'green' : 'gray'}>
@@ -54,7 +54,7 @@ export function StatsPanel({ pagesGenerated, currentPage, money, pagesPerSecond,
 export function LatestPagePanel({ currentPage, latestPage }) {
   const lines = latestPage ? wrapText(latestPage, 70) : [];
   const border = chalk.blue('┃');
-  const header = chalk.blue('┏━━━') + chalk.gray(' Page ') + chalk.blue(String(currentPage).padEnd(35)) + chalk.blue('━━━┓');
+  const header = chalk.blue('┏━━━') + chalk.gray(' Page ') + chalk.blue(formatPageNumber(currentPage).padEnd(35)) + chalk.blue('━━━┓');
   const footer = chalk.blue('┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛');
 
   return (
@@ -94,7 +94,7 @@ export function WorkersPanel({ workers, canAfford }) {
                 <Text dim>[{i + 1}]</Text>
               </Text>
               <Box>
-                <Text>  Count: {String(count).padStart(5)}</Text>
+                <Text>  Count: {formatNumber(count)}</Text>
                 <Text>  Cost: {formatMoney(cost)}</Text>
               </Box>
               <Box marginLeft={2}>

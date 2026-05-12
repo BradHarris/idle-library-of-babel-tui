@@ -1,4 +1,5 @@
-import { computeStorageScale } from './storageScale.js';
+import { computeStorageScale, pageOffsetFromLocation, locationFromPageOffset } from './storageScale.js';
+import { STORAGE_TIERS } from './config.js';
 
 function stringify(val) {
   return JSON.stringify(val, (_, v) => (typeof v === 'bigint' ? v.toString() + 'n' : v));
@@ -162,6 +163,84 @@ test('huge value', () => {
 
 // Verify always returns exactly 10 tiers
 test('always 10 tiers', () => computeStorageScale(1256584717450n).length, [], 10);
+
+// --- pageOffsetFromLocation tests ---
+
+function equalLoc(a, b) {
+  for (const key of STORAGE_TIERS_KEYS) {
+    if ((a[key] || 0n) !== (b[key] || 0n)) return false;
+  }
+  return true;
+}
+
+const STORAGE_TIERS_KEYS = STORAGE_TIERS.map(t => t.id);
+
+function makeLocation(partial) {
+  const loc = {};
+  for (const key of STORAGE_TIERS_KEYS) {
+    loc[key] = partial[key] ?? 0n;
+  }
+  return loc;
+}
+
+// 3.1 pageOffsetFromLocation(allZeros) === 0n
+test('pageOffsetFromLocation all zeros', pageOffsetFromLocation, [makeLocation({})], 0n);
+
+// 3.2 pageOffsetFromLocation({hardDrive: 1n, ...}) === STORAGE_TIERS[0].multiplier
+test('pageOffsetFromLocation 1 hard drive', pageOffsetFromLocation, [makeLocation({ hardDrive: 1n })], STORAGE_TIERS[0].multiplier);
+
+// Forward: hardDrive=5 → 5 × PAGES_PER_DRIVE
+test('pageOffsetFromLocation 5 hard drives', pageOffsetFromLocation, [makeLocation({ hardDrive: 5n })], 5n * STORAGE_TIERS[0].multiplier);
+
+// --- locationFromPageOffset tests ---
+
+// 3.3 locationFromPageOffset(0n) returns all zeros
+const zeroLoc = locationFromPageOffset(0n);
+test('locationFromPageOffset 0n all zeros', () => equalLoc(zeroLoc, makeLocation({})), [], true);
+
+// 3.6 boundary: location at first page of second drive round-trips
+// (pageOffsetFromLocation(locationFromPageOffset(PAGES_PER_DRIVE)) === PAGES_PER_DRIVE)
+test('boundary: first page of second drive', () => {
+  const boundary = STORAGE_TIERS[0].multiplier;
+  const loc = locationFromPageOffset(boundary);
+  const back = pageOffsetFromLocation(loc);
+  return back === boundary;
+}, [], true);
+
+// 3.4 forward-then-backward round-trip
+// Location values are derived from hardDrive: server = hardDrive / 20, rack = server / 10, etc.
+// So we generate locations by decomposing page numbers to ensure consistency.
+test('round-trip forward→backward', () => {
+  const pageNumbers = [0n, PAGES_PER_DRIVE, 5n * PAGES_PER_DRIVE, 25n * PAGES_PER_DRIVE, 2000n * PAGES_PER_DRIVE, 999999n * PAGES_PER_DRIVE];
+  for (const p of pageNumbers) {
+    const loc = locationFromPageOffset(p);
+    const back = locationFromPageOffset(pageOffsetFromLocation(loc));
+    if (!equalLoc(back, loc)) return false;
+  }
+  return true;
+}, [], true);
+
+// 3.5 backward-then-forward round-trip
+// Note: backward→forward round-trips for page numbers that are multiples of PAGES_PER_DRIVE
+// (the starting page of each hard drive). Non-multiples round-trip to the drive start.
+test('round-trip backward→forward (multiples of drive size)', () => {
+  const pageNumbers = [0n, PAGES_PER_DRIVE, 2n * PAGES_PER_DRIVE, 20n * PAGES_PER_DRIVE, 100n * PAGES_PER_DRIVE, PAGES_PER_DRIVE * 10000000000n];
+  for (const n of pageNumbers) {
+    const loc = locationFromPageOffset(n);
+    const back = pageOffsetFromLocation(loc);
+    if (back !== n) return false;
+  }
+  return true;
+}, [], true);
+
+// 3.7 large page offset exceeding Number.MAX_SAFE_INTEGER
+// Use a clean multiple of PAGES_PER_DRIVE for round-trip
+test('large page offset (> Number.MAX_SAFE_INTEGER)', () => {
+  const huge = PAGES_PER_DRIVE * 999999999999n;
+  const loc = locationFromPageOffset(huge);
+  const back = pageOffsetFromLocation(loc);
+  return back === huge;
+}, [], true);
 
 console.log(`\nResults: ${passed} passed, ${failed} failed, ${passed + failed} total`);
 process.exit(failed > 0 ? 1 : 0);
