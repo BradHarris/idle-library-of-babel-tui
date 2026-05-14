@@ -2,6 +2,12 @@
 
 ## Purpose
 TBD - created by archiving change lcg-page-generation. Update Purpose after archive.
+
+## Current Status: LCG Disabled (2026-05-12)
+
+The LCG permutation layer has been temporarily disabled. The `generatePage(pageNum)` function in `page.js` currently performs a direct base-43 conversion of the page number (via `stateToPage(pageNum, ALPHABET)`) and reverses the result, bypassing `lcgState()` entirely. A TODO comment in the code marks the line to restore `lcgState(pageNum)` when re-enabling.
+
+The LCG implementation in `lcg.js` and its associated tests remain intact and can be re-enabled by restoring the call to `lcgState(pageNum)` inside `generatePage`.
 ## Requirements
 ### Requirement: LCG parameters produce a full-period permutation over all page combinations
 

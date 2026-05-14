@@ -1,8 +1,8 @@
-import React from 'react';
-import { Text, Box, useApp } from 'ink';
+import React, { useState, useCallback } from 'react';
+import { Text, Box } from 'ink';
 import chalk from 'chalk';
 import { TIERS, LOG_MAX_ENTRIES, STORAGE_TIERS } from './config.js';
-import { formatNumber, formatMoney, formatPageNumber, wrapText } from './format.js';
+import { formatNumber, formatMoney, formatPageNumber, wrapText, formatLocationDisplay } from './format.js';
 import { getWorkerCost } from './config.js';
 import { computeStorageScale } from './storageScale.js';
 
@@ -51,11 +51,15 @@ export function StatsPanel({ pagesGenerated, currentPage, money, pagesPerSecond,
 /**
  * LatestPagePanel — displays the most recently generated page.
  */
-export function LatestPagePanel({ currentPage, latestPage }) {
-  const lines = latestPage ? wrapText(latestPage, 70) : [];
+export function LatestPagePanel({ currentPage, latestPage, wrapWidth = 70 }) {
+  const lines = latestPage ? wrapText(latestPage, wrapWidth) : [];
   const border = chalk.blue('┃');
-  const header = chalk.blue('┏━━━') + chalk.gray(' Page ') + chalk.blue(formatPageNumber(currentPage).padEnd(35)) + chalk.blue('━━━┓');
-  const footer = chalk.blue('┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛');
+  const headerLabel = ` Page ${formatPageNumber(currentPage)}`;
+  const innerWidth = wrapWidth + 1; // +1 for the border column prefix
+  const remaining = Math.max(0, innerWidth - headerLabel.length - 6); // 6 for '━━━' prefix + '━━━' suffix
+  const headerFill = '━'.repeat(remaining);
+  const header = chalk.blue('┏━━━') + chalk.gray(headerLabel) + chalk.blue(headerFill + '━━━┓');
+  const footer = chalk.blue(`┗${'━'.repeat(innerWidth)}┛`);
 
   return (
     <Box flexDirection="column" borderColor="blue" borderStyle="single" paddingX={1}>
@@ -153,6 +157,75 @@ export function StorageScalePanel({ pagesGenerated }) {
           </Text>
         </Box>
       ))}
+    </Box>
+  );
+}
+
+/**
+ * SearchOverlay — modal overlay for phrase search.
+ * Replaces the main UI when open.
+ */
+export function SearchOverlay({ searchQuery, searchResult, inputValue }) {
+  return (
+    <Box flexDirection="column" width="100%" height={35} borderColor="cyan" borderStyle="single">
+      <Text bold color="cyan">🔍 Search the Library</Text>
+      <Box flexDirection="column" marginTop={1} paddingX={1}>
+        <Box>
+          <Text color="gray">Query: </Text>
+          <Text color="white">{inputValue}</Text>
+        </Box>
+
+        {searchQuery && (
+          <>
+            <Box flexDirection="column" marginTop={1} paddingX={1}>
+              <Text bold color="white">Search Result</Text>
+              <Box>
+                <Text color="gray">Query: </Text>
+                <Text color="white">{searchQuery}</Text>
+              </Box>
+
+              {searchResult && searchResult.type === 'found' && (
+                <Box flexDirection="column" marginTop={1}>
+                  <Box>
+                    <Text color="gray">Page: </Text>
+                    <Text color="green">{formatPageNumber(searchResult.address)}</Text>
+                  </Box>
+                  <Box>
+                    <Text color="gray">Location: </Text>
+                    <Text color="green">{formatLocationDisplay(searchResult.location)}</Text>
+                  </Box>
+                  <Box flexDirection="column" marginTop={1}>
+                    <Text color="gray">Content:</Text>
+                    {wrapText(searchResult.content, 70).map((line, i) => (
+                      <Text key={i} color="white">{line}</Text>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              {searchResult && searchResult.type === 'notFound' && (
+                <Box flexDirection="column" marginTop={1} paddingX={1}>
+                  <Box>
+                    <Text color="yellow">Not yet discovered</Text>
+                  </Box>
+                  <Box>
+                    <Text color="gray">Target page: </Text>
+                    <Text color="yellow">{formatPageNumber(searchResult.address)}</Text>
+                  </Box>
+                  <Box>
+                    <Text color="gray">Pages generated: </Text>
+                    <Text color="gray">{formatPageNumber(searchResult.pagesGenerated)}</Text>
+                  </Box>
+                </Box>
+              )}
+            </Box>
+          </>
+        )}
+      </Box>
+
+      <Box marginTop={1} paddingX={1}>
+        <Text dim>Enter to search  •  Escape to close</Text>
+      </Box>
     </Box>
   );
 }

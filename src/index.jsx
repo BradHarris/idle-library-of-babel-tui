@@ -3,14 +3,22 @@ import { render, Text, Box, useInput } from 'ink';
 import chalk from 'chalk';
 import { TIERS, getWorkerCost } from './config.js';
 import { useGameStore } from './stores/gameStore.js';
-import { StatsPanel, LatestPagePanel, WorkersPanel, LogPanel, StorageScalePanel } from './ui.jsx';
+import { StatsPanel, LatestPagePanel, WorkersPanel, LogPanel, StorageScalePanel, SearchOverlay } from './ui.jsx';
 import { formatMoney, formatNumber } from './format.js';
+import { queryToPageAddress, generatePage, stateToPage, ALPHABET } from './page.js';
+import { locationFromPageOffset } from './storageScale.js';
 
 /**
  * Main App component — arranges all four panels in a grid layout.
  */
 export function App() {
   const [renderTick, setRenderTick] = useState(0);
+
+  // Search state
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResult, setSearchResult] = useState(null);
+  const [inputValue, setInputValue] = useState('');
 
   // Subscribe to store state via selectors
   const pagesGenerated = useGameStore(s => s.pagesGenerated);
@@ -31,6 +39,15 @@ export function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Terminal resize handler — triggers re-render on resize
+  useEffect(() => {
+    const handleResize = () => setRenderTick(t => t + 1);
+    process.stdout.on('resize', handleResize);
+    return () => {
+      process.stdout.off('resize', handleResize);
+    };
+  }, []);
+
   // Logic tick — runs at dynamic interval based on tick rate level
   useEffect(() => {
     const interval = setInterval(() => {
@@ -49,16 +66,65 @@ export function App() {
     useGameStore.getState().upgradeTickRate();
   }, []);
 
-  // Key input for hiring (keys 1-7) and tick rate upgrade (u)
-  useInput((input) => {
+  // Key input for hiring (keys 1-7), tick rate upgrade (u), and search
+  useInput((input, key) => {
+    if (searchOpen) {
+      if (key.escape) {
+        setSearchOpen(false);
+        setSearchResult(null);
+        setInputValue('');
+        return true;
+      }
+      if (key.backspace) {
+        setInputValue(prev => prev.slice(0, -1));
+        return true;
+      }
+      if (key.return) {
+        handleSearch(inputValue);
+        return true;
+      }
+      if (input.length === 1) {
+        setInputValue(prev => prev + input);
+        return true;
+      }
+      return false;
+    }
     if (input === 'u') {
       handleTickRateUpgrade();
-      return;
+      return true;
+    }
+    if (input === 's') {
+      setSearchOpen(true);
+      setSearchQuery('');
+      setSearchResult(null);
+      setInputValue('');
+      return true;
     }
     const keyMap = { '1': 'writer', '2': 'manager', '3': 'overseer', '4': 'rector', '5': 'cardinal', '6': 'pope', '7': 'archbishop' };
     const tierId = keyMap[input];
     if (tierId) handleHire(tierId);
   });
+
+  // Handle search submission
+  // Note: we bypass the LCG for search and go straight from the base-43
+  // address to page content. This way the search query maps directly to
+  // what the page would display — searching for "." shows the page with ".",
+  // etc. The LCG is only used for sequential page generation.
+  const handleSearch = useCallback((query) => {
+    if (!query || !query.trim()) {
+      return;
+    }
+    const address = queryToPageAddress(query.trim());
+    // Convert base-43 state directly to page content (no LCG)
+    const content = stateToPage(address, ALPHABET).split('').reverse().join('');
+    if (address <= pagesGenerated) {
+      const location = locationFromPageOffset(address);
+      setSearchResult({ type: 'found', address, content, location });
+    } else {
+      setSearchResult({ type: 'notFound', address, pagesGenerated });
+    }
+    setSearchQuery(query.trim());
+  }, [pagesGenerated]);
 
   // Build key prompt string
   const keyPrompt = TIERS.map((tier, i) => {
@@ -69,44 +135,71 @@ export function App() {
     return can ? label : chalk.dim(label);
   }).join('  ');
 
+  // Search hint
+  const searchHint = chalk.gray('[S]') + ' Search';
+
+  if (searchOpen) {
+    return (
+      <SearchOverlay
+        searchQuery={searchQuery}
+        searchResult={searchResult}
+        inputValue={inputValue}
+      />
+    );
+  }
+
+  // Compute dynamic wrap width for LatestPagePanel
+  // Right side (flexGrow=3 of 5) is split between Log (flexGrow=2) and LatestPage (flexGrow=1).
+  // LatestPage gets ~1/3 of the right column width, minus borders/padding/gap overhead.
+  const terminalCols = process.stdout?.columns || 80;
+  const wrapWidth = Math.max(20, Math.floor(terminalCols * (1 / 5)) - 5);
+
   return (
-    <Box flexDirection="column" paddingX={1}>
-      {/* Stats Panel — top */}
-      <StatsPanel
-        pagesGenerated={pagesGenerated}
-        currentPage={currentPage}
-        money={money}
-        pagesPerSecond={pps}
-        tickRateLevel={tickRateLevel}
-        tickRateCost={tickRateCost}
-      />
+    <Box flexDirection="column">
+      {/* Top row: Stats | Storage Scale */}
+      <Box flexDirection="row" gap={1}>
+        <Box flexGrow={2}>
+          <StatsPanel
+            pagesGenerated={pagesGenerated}
+            currentPage={currentPage}
+            money={money}
+            pagesPerSecond={pps}
+            tickRateLevel={tickRateLevel}
+            tickRateCost={tickRateCost}
+          />
+        </Box>
+        <Box flexGrow={3}>
+          <StorageScalePanel
+            pagesGenerated={pagesGenerated}
+          />
+        </Box>
+      </Box>
 
-      {/* Storage Scale Panel — below stats */}
-      <StorageScalePanel
-        pagesGenerated={pagesGenerated}
-      />
-
-      {/* Latest Page Panel — below storage scale */}
-      <LatestPagePanel
-        currentPage={currentPage}
-        latestPage={latestPage || ''}
-      />
-
-      {/* Workers and Log — side by side */}
-      <Box marginTop={1}>
-        <Box flexDirection="column" flex={1}>
+      {/* Bottom row: Workers | Log + LatestPage */}
+      <Box flexDirection="row" gap={1} marginTop={1}>
+        <Box flexGrow={2}>
           <WorkersPanel
             workers={workers}
             canAfford={canAfford}
           />
         </Box>
-        <Box marginLeft={1} flex={1}>
-          <LogPanel log={log} />
+        <Box flexGrow={3} flexDirection="row" gap={1}>
+          <Box flexGrow={2}>
+            <LogPanel log={log} />
+          </Box>
+          <Box flexGrow={1}>
+            <LatestPagePanel
+              currentPage={currentPage}
+              latestPage={latestPage || ''}
+              wrapWidth={wrapWidth}
+            />
+          </Box>
         </Box>
       </Box>
 
+      {/* Keybind prompt — full width below grid */}
       <Box marginTop={1} flexDirection="column">
-        <Text dim>{keyPrompt}</Text>
+        <Text dim>{keyPrompt}  {searchHint}</Text>
         <Text dim>
           {money >= tickRateCost
             ? chalk.green('[U]')

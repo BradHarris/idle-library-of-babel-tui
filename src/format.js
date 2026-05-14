@@ -77,6 +77,42 @@ export function formatPagesPerSecond(pps) {
 }
 
 /**
+ * Map from location tier id to display label (singular form).
+ */
+const LOCATION_LABELS = {
+  hardDrive: 'Drive',
+  server: 'Server',
+  serverRack: 'Rack',
+  serverFloor: 'Floor',
+  building: 'Building',
+  city: 'City',
+  planet: 'Planet',
+  solarSystem: 'Solar System',
+  galaxy: 'Galaxy',
+  universe: 'Universe',
+};
+
+/**
+ * Format a location tuple as a comma-separated string showing non-zero levels
+ * from highest to lowest. Example: "Building 12, Floor 3, Rack 7, Server 2, Drive 0".
+ * @param {Record<string, bigint>} location — location tuple with tier ids as keys
+ * @returns {string} — formatted location string
+ */
+export function formatLocationDisplay(location) {
+  const parts = [];
+  // Iterate from highest tier to lowest (reverse of STORAGE_TIERS order)
+  const tierIds = Object.keys(LOCATION_LABELS);
+  for (let i = tierIds.length - 1; i >= 0; i--) {
+    const id = tierIds[i];
+    const value = location[id];
+    if (value !== undefined && (value > 0n || id === 'hardDrive')) {
+      parts.push(`${LOCATION_LABELS[id]} ${value.toString()}`);
+    }
+  }
+  return parts.length > 0 ? parts.join(', ') : 'Drive 0';
+}
+
+/**
  * Wrap a string into lines of a given width at character boundaries.
  * @param {string} text — the text to wrap
  * @param {number} width — the maximum line width
