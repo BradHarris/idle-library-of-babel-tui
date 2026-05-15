@@ -24,7 +24,7 @@ export const LOG_CLEANUP_INTERVAL_TICKS = 500; // every 25s
 export const TICK_RATE_BASE_COST = 100000;   // $100K initial upgrade cost
 export const TICK_RATE_MIN_INTERVAL = 33;    // ms minimum (30 ticks/sec max)
 export const TICK_RATE_IMPROVEMENT_MS = 50;  // ms reduction per purchase
-export const TICK_RATE_MAX_TICKS_PER_SECOND = 30; // maximum achievable tick rate
+export const TICK_RATE_CAP_LEVEL = 19;       // last level with real interval > 33ms
 
 /**
  * Create the initial game state.
@@ -129,6 +129,18 @@ export function getDoublingProgress(playerBoughtCount) {
  */
 export function getTickInterval(tickRateLevel) {
   return Math.max(TICK_RATE_MIN_INTERVAL, Math.round(TICK_INTERVAL - tickRateLevel * TICK_RATE_IMPROVEMENT_MS));
+}
+
+/**
+ * Calculate the speed multiplier past the real-interval cap.
+ * Once the tick interval hits the 33ms floor (level ≥ 20), each additional
+ * upgrade doubles effective output via a multiplier rather than a faster interval.
+ * @param {number} tickRateLevel — number of upgrades purchased
+ * @returns {number} — speed multiplier (1, 2, 4, 8, ...)
+ */
+export function getTickSpeedMultiplier(tickRateLevel) {
+  if (tickRateLevel <= TICK_RATE_CAP_LEVEL) return 1;
+  return 1 << (tickRateLevel - TICK_RATE_CAP_LEVEL); // 2^(level - 19)
 }
 
 /**

@@ -1,20 +1,17 @@
 import { useGameStore } from '@game/stores/gameStore';
 import { formatPageNumber, formatMoney, formatNumber } from '@game/format';
 
-const TICK_INTERVAL = 1000;
-const TICK_RATE_IMPROVEMENT_MS = 50;
-const TICK_RATE_MIN_INTERVAL = 33;
-
 export function StatsPanel() {
   const pagesGenerated = useGameStore(s => s.pagesGenerated);
   const money = useGameStore(s => s.money);
   const pps = useGameStore(s => s.pps);
   const tickRateLevel = useGameStore(s => s.tickRateLevel);
   const tickRateCost = useGameStore(s => s.tickRateCost);
+  const tickInterval = useGameStore(s => s.tickInterval);
+  const tickSpeedMultiplier = useGameStore(s => s.tickSpeedMultiplier);
 
   const canAfford = money >= tickRateCost;
-  const tickInterval = Math.max(TICK_RATE_MIN_INTERVAL, Math.round(TICK_INTERVAL - tickRateLevel * TICK_RATE_IMPROVEMENT_MS));
-  const tickRate = (1000 / tickInterval).toFixed(1);
+  const effectiveTickRate = (1000 / tickInterval * tickSpeedMultiplier).toFixed(1);
 
   const handleUpgrade = () => {
     useGameStore.getState().upgradeTickRate();
@@ -39,8 +36,11 @@ export function StatsPanel() {
         <div className="flex justify-between items-center">
           <span className="text-gray-400">Tick rate:</span>
           <span className="font-mono">
-            {tickRate}/s
-            {tickRateLevel > 0 && <span className="text-gray-500 text-xs ml-1">(level {formatNumber(tickRateLevel)})</span>}
+            {effectiveTickRate}/s
+            {tickSpeedMultiplier > 1 && (
+              <span className="text-yellow-400 text-xs ml-1">(×{tickSpeedMultiplier})</span>
+            )}
+            {tickRateLevel > 0 && <span className="text-gray-500 text-xs ml-1">lv.{formatNumber(tickRateLevel)}</span>}
           </span>
         </div>
         <button

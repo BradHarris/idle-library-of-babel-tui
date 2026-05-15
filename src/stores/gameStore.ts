@@ -5,6 +5,7 @@ import {
   createInitialState,
   getWorkerCost,
   getTickInterval,
+  getTickSpeedMultiplier,
   calcPagesPerSecond,
   getDoublingMultiplier,
   getDoublingProgress,
@@ -50,6 +51,7 @@ interface GameState {
   pps: number;
   canAfford: Record<string, boolean>;
   tickInterval: number;
+  tickSpeedMultiplier: number;
   latestPage: string;
   doublingMultipliers: Record<string, number>;
   doublingProgress: Record<string, number>;
@@ -142,6 +144,7 @@ export const useGameStore = create<GameState & GameActions>()(
       pps: calcPagesPerSecond(initial.workers, getDoublingMultiplier(initial.playerWorkers.writer || 0)),
       canAfford: computeCanAfford(initial.money, initial.playerWorkers),
       tickInterval: getTickInterval(initial.tickRateLevel),
+      tickSpeedMultiplier: getTickSpeedMultiplier(initial.tickRateLevel),
       latestPage: generatePage(initial.currentPage),
       doublingMultipliers: computeDoublingMultipliers(initial.playerWorkers),
       doublingProgress: computeDoublingProgress(initial.playerWorkers),
@@ -165,7 +168,8 @@ export const useGameStore = create<GameState & GameActions>()(
           // Compute PPS using pre-cascade writers with their multiplier
           const writerMultiplier = getDoublingMultiplier(state.playerWorkers.writer || 0);
           const pps = (oldWorkers.writer ?? 0) * writerMultiplier;
-          const pagesThisTick = pps * delta;
+          const speedMultiplier = getTickSpeedMultiplier(state.tickRateLevel);
+          const pagesThisTick = pps * delta * speedMultiplier;
 
           // Update money
           const moneyThisTick = pagesThisTick * EARNINGS_PER_PAGE;
@@ -189,9 +193,10 @@ export const useGameStore = create<GameState & GameActions>()(
 
           // Compute and update derived state in same transaction
           const postWorkerMultiplier = getDoublingMultiplier(state.playerWorkers.writer || 0);
-          state.pps = calcPagesPerSecond(state.workers, postWorkerMultiplier);
+          state.pps = calcPagesPerSecond(state.workers, postWorkerMultiplier) * speedMultiplier;
           state.canAfford = computeCanAfford(state.money, state.playerWorkers);
           state.tickInterval = getTickInterval(state.tickRateLevel);
+          state.tickSpeedMultiplier = speedMultiplier;
           state.doublingMultipliers = computeDoublingMultipliers(state.playerWorkers);
           state.doublingProgress = computeDoublingProgress(state.playerWorkers);
         });
@@ -241,9 +246,10 @@ export const useGameStore = create<GameState & GameActions>()(
           addLogEntry(state, msg);
 
           const writerMultiplier = getDoublingMultiplier(state.playerWorkers.writer || 0);
-          state.pps = calcPagesPerSecond(state.workers, writerMultiplier);
+          state.pps = calcPagesPerSecond(state.workers, writerMultiplier) * getTickSpeedMultiplier(state.tickRateLevel);
           state.canAfford = computeCanAfford(state.money, state.playerWorkers);
           state.tickInterval = getTickInterval(state.tickRateLevel);
+          state.tickSpeedMultiplier = getTickSpeedMultiplier(state.tickRateLevel);
           state.doublingMultipliers = computeDoublingMultipliers(state.playerWorkers);
           state.doublingProgress = computeDoublingProgress(state.playerWorkers);
         });
@@ -266,7 +272,11 @@ export const useGameStore = create<GameState & GameActions>()(
         const newLevel = currentState.tickRateLevel + 1;
         const newCost = TICK_RATE_BASE_COST * Math.pow(2, newLevel);
         const newInterval = getTickInterval(newLevel);
-        const msg = `Tick rate upgraded to level ${newLevel} (${newInterval}ms interval)`;
+        const newSpeedMultiplier = getTickSpeedMultiplier(newLevel);
+        const speedDesc = newSpeedMultiplier > 1
+          ? ` (×${newSpeedMultiplier} → effective ${(1000 / newInterval * newSpeedMultiplier).toFixed(0)}/s)`
+          : '';
+        const msg = `Tick rate upgraded to level ${newLevel} (${newInterval}ms interval${speedDesc})`;
 
         set(state => {
           state.money -= cost;
@@ -276,9 +286,10 @@ export const useGameStore = create<GameState & GameActions>()(
 
           // Compute derived state
           const writerMultiplier = getDoublingMultiplier(state.playerWorkers.writer || 0);
-          state.pps = calcPagesPerSecond(state.workers, writerMultiplier);
+          state.pps = calcPagesPerSecond(state.workers, writerMultiplier) * newSpeedMultiplier;
           state.canAfford = computeCanAfford(state.money, state.playerWorkers);
           state.tickInterval = getTickInterval(state.tickRateLevel);
+          state.tickSpeedMultiplier = newSpeedMultiplier;
           state.doublingMultipliers = computeDoublingMultipliers(state.playerWorkers);
           state.doublingProgress = computeDoublingProgress(state.playerWorkers);
         });
@@ -296,6 +307,7 @@ export const useGameStore = create<GameState & GameActions>()(
           pps: calcPagesPerSecond(init.workers, getDoublingMultiplier(init.playerWorkers.writer || 0)),
           canAfford: computeCanAfford(init.money, init.playerWorkers),
           tickInterval: getTickInterval(init.tickRateLevel),
+          tickSpeedMultiplier: getTickSpeedMultiplier(init.tickRateLevel),
           latestPage: generatePage(init.currentPage),
           doublingMultipliers: computeDoublingMultipliers(init.playerWorkers),
           doublingProgress: computeDoublingProgress(init.playerWorkers),
