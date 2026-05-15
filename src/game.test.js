@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { TIERS, getWorkerCost, createInitialState, getTickInterval, calcPagesPerSecond, TICK_RATE_BASE_COST, LOG_MAX_ENTRIES, EARNINGS_PER_PAGE } from './config.js';
+import { TIERS, getWorkerCost, getDoublingMultiplier, getDoublingProgress, getDoublingThresholds, createInitialState, getTickInterval, calcPagesPerSecond, TICK_RATE_BASE_COST, LOG_MAX_ENTRIES, EARNINGS_PER_PAGE } from './config.js';
 import { formatNumber, formatMoney, formatPageNumber, formatPagesPerSecond, wrapText } from './format.js';
 import { generatePage } from './page.js';
 import { useGameStore } from './stores/gameStore.ts';
@@ -413,5 +413,126 @@ describe('Format Tests — wrapText', () => {
 
   it('returns single line for short text', () => {
     assert.deepStrictEqual(wrapText('hello', 80), ['hello']);
+  });
+});
+
+describe('Doubling Milestones — Multiplier', () => {
+  it('returns 1 for 0 purchased workers', () => {
+    assert.strictEqual(getDoublingMultiplier(0), 1, '0 purchased = 1×');
+  });
+
+  it('returns 1 for 9 purchased workers', () => {
+    assert.strictEqual(getDoublingMultiplier(9), 1, '9 purchased = 1× (before first milestone)');
+  });
+
+  it('returns 2 at 10 purchased workers', () => {
+    assert.strictEqual(getDoublingMultiplier(10), 2, '10 purchased = 2×');
+  });
+
+  it('returns 2 between milestones (15 workers)', () => {
+    assert.strictEqual(getDoublingMultiplier(15), 2, '15 purchased = 2×');
+  });
+
+  it('returns 4 at 20 purchased workers', () => {
+    assert.strictEqual(getDoublingMultiplier(20), 4, '20 purchased = 4×');
+  });
+
+  it('returns 4 between milestones (30 workers)', () => {
+    assert.strictEqual(getDoublingMultiplier(30), 4, '30 purchased = 4×');
+  });
+
+  it('returns 8 at 40 purchased workers', () => {
+    assert.strictEqual(getDoublingMultiplier(40), 8, '40 purchased = 8×');
+  });
+});
+
+describe('Doubling Milestones — Progress', () => {
+  it('returns 0 at 0 purchased', () => {
+    assert.strictEqual(getDoublingProgress(0), 0, '0 purchased = 0 progress');
+  });
+
+  it('returns 0.5 at 5 purchased', () => {
+    assert.strictEqual(getDoublingProgress(5), 0.5, '5 purchased = 0.5 progress (5/10)');
+  });
+
+  it('returns 0 at 10 purchased (milestone reached)', () => {
+    assert.strictEqual(getDoublingProgress(10), 0, '10 purchased = 0 progress (milestone reached)');
+  });
+
+  it('returns 0.5 at 15 purchased', () => {
+    assert.strictEqual(getDoublingProgress(15), 0.5, '15 purchased = 0.5 progress (15-10)/(20-10)');
+  });
+
+  it('returns 0 at 20 purchased (milestone reached)', () => {
+    assert.strictEqual(getDoublingProgress(20), 0, '20 purchased = 0 progress (milestone reached)');
+  });
+
+  it('returns 0.5 at 30 purchased', () => {
+    assert.strictEqual(getDoublingProgress(30), 0.5, '30 purchased = 0.5 progress (30-20)/(40-20)');
+  });
+});
+
+describe('Doubling Milestones — Thresholds', () => {
+  it('returns first thresholds correctly', () => {
+    const thresholds = getDoublingThresholds();
+    assert.deepStrictEqual(thresholds.slice(0, 8), [10, 20, 40, 80, 160, 320, 640, 1280]);
+  });
+
+  it('returns 64 thresholds total', () => {
+    assert.strictEqual(getDoublingThresholds().length, 64);
+  });
+});
+
+describe('Doubling Milestones — PPS with Multiplier', () => {
+  it('total output = worker count × multiplier', () => {
+    resetStore();
+    // Set 12 total writers, 10 purchased (multiplier = 2)
+    useGameStore.setState(s => {
+      s.workers.writer = 12;
+      s.playerWorkers.writer = 10;
+    });
+    useGameStore.getState().tick(0); // triggers derived state recomputation
+    const state = useGameStore.getState();
+    assert.strictEqual(state.pps, 24, '12 writers × 2 multiplier = 24 pps');
+  });
+
+  it('no doubling below first milestone', () => {
+    resetStore();
+    useGameStore.setState(s => {
+      s.workers.writer = 5;
+      s.playerWorkers.writer = 5;
+    });
+    useGameStore.getState().tick(0);
+    assert.strictEqual(useGameStore.getState().pps, 5, '5 writers × 1 multiplier = 5 pps');
+  });
+});
+
+describe('Game Engine — Hire with Player Workers', () => {
+  it('hire updates playerWorkers, cost uses player count', () => {
+    resetStore();
+    useGameStore.setState(s => { s.money = 10000; });
+    // Start: 1 writer (free), cost of next = $10 × 1.5^1 = $15
+    useGameStore.getState().hire('writer');
+    const state = useGameStore.getState();
+    assert.strictEqual(state.playerWorkers.writer, 2, 'playerWorkers writer = 2');
+  });
+
+  it('cascade does not affect playerWorkers or pricing', () => {
+    resetStore();
+    useGameStore.setState(s => {
+      s.money = 10000;
+      s.workers.writer = 3;
+      s.workers.manager = 2;
+      s.workers.overseer = 1;
+      s.playerWorkers.writer = 3;
+      s.playerWorkers.manager = 2;
+      s.playerWorkers.overseer = 1;
+    });
+    useGameStore.getState().tick(1000); // cascades + produces pages
+    const state = useGameStore.getState();
+    assert.strictEqual(state.playerWorkers.writer, 3, 'playerWorkers.writer unchanged by cascade');
+    assert.strictEqual(state.playerWorkers.manager, 2, 'playerWorkers.manager unchanged by cascade');
+    assert.strictEqual(state.playerWorkers.overseer, 1, 'playerWorkers.overseer unchanged by cascade');
+    assert.strictEqual(state.workers.writer, 6, 'workers.writer is cascade-augmented (3+2+1)');
   });
 });

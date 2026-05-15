@@ -76,36 +76,38 @@ export function LatestPagePanel({ currentPage, latestPage, wrapWidth = 70 }) {
 
 /**
  * WorkersPanel — displays all 7 worker tiers with hire keybinds.
+ * Shows player-bought count, doubling multiplier, cost, and doubling progress bar.
  */
-export function WorkersPanel({ workers, canAfford }) {
+export function WorkersPanel({ playerWorkers, doublingMultipliers, doublingProgress, canAfford }) {
   return (
     <Box flexDirection="column" borderColor="green" borderStyle="single" paddingX={1}>
       <Text bold>{chalk.green('👥 Workers')}</Text>
       {TIERS.map((tier, i) => {
-        const count = workers[tier.id] || 0;
-        const cost = getWorkerCost(tier, count);
+        const playerCount = playerWorkers[tier.id] || 0;
+        const cost = getWorkerCost(tier, playerCount);
         const can = canAfford[tier.id];
-        const isOwned = count > 0;
-        const progressWidth = 18;
-        const progress = Math.min(i / (TIERS.length - 1), 1);
+        const multiplier = doublingMultipliers[tier.id] || 1;
+        const progress = doublingProgress[tier.id] ?? 0;
+        const progressWidth = 16;
         const filled = Math.round(progress * progressWidth);
 
         return (
           <Box key={tier.id} flexDirection="column" marginTop={i > 0 ? 1 : 0}>
             <Box>
-              <Text bold isHighlighted={isOwned} color={can ? 'green' : 'gray'}>
+              <Text bold color={can ? 'green' : 'gray'}>
                 {can ? chalk.green('[H]') : chalk.dim('[..]')} {tier.name.padEnd(10)}{' '}
                 <Text dim>[{i + 1}]</Text>
               </Text>
               <Box>
-                <Text>  Count: {formatNumber(count)}</Text>
+                <Text>  Count: {formatNumber(playerCount)}</Text>
+                {multiplier > 1 && <Text color="yellow"> ×{multiplier}</Text>}
                 <Text>  Cost: {formatMoney(cost)}</Text>
               </Box>
               <Box marginLeft={2}>
                 <Box>
                   {Array.from({ length: progressWidth }, (_, j) => (
                     <Text key={j} color={j < filled ? 'green' : 'gray'}>
-                      {j < filled ? '█' : '░'}
+                      {j < filled ? '▓' : '░'}
                     </Text>
                   ))}
                 </Box>

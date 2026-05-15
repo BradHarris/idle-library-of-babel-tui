@@ -16,7 +16,7 @@ The TUI SHALL render a two-row grid dashboard: the top row contains the Stats pa
 
 #### Scenario: Workers panel lists all tiers with counts and costs
 - **WHEN** the game is running
-- **THEN** the Workers panel shows all seven tiers, each with the current count, current purchase cost, and a hire button in the left column of the bottom row
+- **THEN** the Workers panel shows all seven tiers, each with the hire keybind, tier name, player-bought worker count, current purchase cost, doubling multiplier, and a progress bar toward the next output-doubling milestone, in the left column of the bottom row
 
 #### Scenario: Log panel shows recent events
 - **WHEN** events occur (hires, auto-hires)
@@ -40,6 +40,29 @@ The 280-character page content SHALL be wrapped to fit within the display width.
 #### Scenario: Wrapping preserves character order
 - **WHEN** a page is wrapped and displayed
 - **THEN** the character sequence across lines is identical to the original page string
+
+### Requirement: Workers panel doubling display
+The Workers panel SHALL display player-bought count (not cascade-augmented count), current purchase cost, doubling multiplier, and a progress bar toward the next output-doubling milestone. The progress bar SHALL use the `doublingProgress` value from the game store, displayed as filled (█) and empty (░) blocks.
+
+#### Scenario: Progress bar reflects doubling progress
+- **WHEN** the player has purchased 5 writers (progress 0.5 toward first doubling at 10)
+- **THEN** the progress bar shows approximately 50% filled (e.g., "████████░░░░░░░░" for an 18-block bar)
+
+#### Scenario: Tier row shows player count and multiplier
+- **WHEN** the player has purchased 12 writers with multiplier 2
+- **THEN** the Writer row displays count 12 and multiplier "×2"
+
+#### Scenario: Cost uses player-bought count
+- **WHEN** the player has purchased 3 writers but 2 cascade workers (5 total)
+- **THEN** the cost displayed is based on 3 purchased workers, not 5 total
+
+#### Scenario: Progress bar resets at milestone
+- **WHEN** the player has purchased exactly 10 writers (milestone reached, progress = 0 toward next at 20)
+- **THEN** the progress bar shows 0% filled
+
+#### Scenario: Progress bar reflects progress after milestone
+- **WHEN** the player has purchased 30 writers (progress 0.5 between milestones 20 and 40)
+- **THEN** the progress bar shows approximately 50% filled
 
 ### Requirement: Number formatting
 The system SHALL format numbers using a tiered scheme: raw integers up to 9,999; K/M/B/T suffixes up to 999.9T; scientific notation above 999.9T.

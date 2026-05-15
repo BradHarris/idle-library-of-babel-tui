@@ -33,14 +33,17 @@ export const TICK_RATE_MAX_TICKS_PER_SECOND = 30; // maximum achievable tick rat
  */
 export function createInitialState() {
   const workers = {};
+  const playerWorkers = {};
   for (const tier of TIERS) {
     workers[tier.id] = tier.id === 'writer' ? 1 : 0;
+    playerWorkers[tier.id] = tier.id === 'writer' ? 1 : 0;
   }
   return {
     pagesGenerated: 0n,
     currentPage: 0n,
     money: 0,
     workers,
+    playerWorkers,
     log: [],
     lastTick: Date.now(),
     _tickCount: 0,
@@ -52,13 +55,71 @@ export function createInitialState() {
 
 /**
  * Calculate the current cost to purchase one worker of a given tier.
- * Cost = baseCost × 1.5^count
+ * Cost = baseCost × 1.5^playerBoughtCount
  * @param {object} tier — tier definition from config
- * @param {number} count — current worker count for this tier
+ * @param {number} playerBoughtCount — player's directly-purchased worker count for this tier
  * @returns {number} — cost to purchase one more worker
  */
-export function getWorkerCost(tier, count) {
-  return tier.baseCost * Math.pow(1.5, count);
+export function getWorkerCost(tier, playerBoughtCount) {
+  return tier.baseCost * Math.pow(1.5, playerBoughtCount);
+}
+
+/**
+ * Generate the doubling milestone thresholds: [10, 20, 40, 80, 160, ...].
+ * threshold(n) = 10 × 2^n for n >= 0.
+ * Returns thresholds up to a practical limit (max 64 milestones).
+ * @returns {number[]} — array of doubling thresholds
+ */
+export function getDoublingThresholds() {
+  const thresholds = [];
+  for (let i = 0; i < 64; i++) {
+    thresholds.push(10 * (1 << i));
+  }
+  return thresholds;
+
+}
+
+/**
+ * Calculate the output multiplier for a given player-bought worker count.
+ * Multiplier = 2^milestonesReached.
+ * @param {number} playerBoughtCount — player's directly-purchased count
+ * @returns {number} — output multiplier (1, 2, 4, 8, ...)
+ */
+export function getDoublingMultiplier(playerBoughtCount) {
+  const thresholds = getDoublingThresholds();
+  let milestones = 0;
+  for (const t of thresholds) {
+    if (playerBoughtCount >= t) {
+      milestones++;
+    } else {
+      break;
+    }
+  }
+  return 1 << milestones; // 2^milestones
+}
+
+/**
+ * Calculate progress (0-1) toward the next doubling milestone.
+ * Returns 0 if at or past a milestone (resetting toward next).
+ * @param {number} playerBoughtCount — player's directly-purchased count
+ * @returns {number} — progress fraction 0..1
+ */
+export function getDoublingProgress(playerBoughtCount) {
+  const thresholds = getDoublingThresholds();
+  let previousThreshold = 0;
+
+  for (let i = 0; i < thresholds.length; i++) {
+    if (playerBoughtCount >= thresholds[i]) {
+      previousThreshold = thresholds[i];
+    } else {
+      // thresholds[i] is the next unreached threshold
+      const nextThreshold = thresholds[i];
+      const gap = nextThreshold - previousThreshold;
+      return gap > 0 ? (playerBoughtCount - previousThreshold) / gap : 0;
+    }
+  }
+  // Beyond all thresholds — progress is 0
+  return 0;
 }
 
 /**
@@ -71,12 +132,13 @@ export function getTickInterval(tickRateLevel) {
 }
 
 /**
- * Calculate pages per second: only writer workers produce pages.
- * @param {object} workers — worker counts by tier id
+ * Calculate pages per second: writer workers produce pages, multiplied by their doubling multiplier.
+ * @param {object} workers — total worker counts by tier id (cascade-augmented)
+ * @param {number} [multiplier=1] — doubling multiplier for writers based on player-purchased count
  * @returns {number} — pages per second
  */
-export function calcPagesPerSecond(workers) {
-  return workers.writer ?? 0;
+export function calcPagesPerSecond(workers, multiplier = 1) {
+  return (workers.writer ?? 0) * multiplier;
 }
 
 /**

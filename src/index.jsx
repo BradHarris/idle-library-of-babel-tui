@@ -24,6 +24,7 @@ export function App() {
   const pagesGenerated = useGameStore(s => s.pagesGenerated);
   const currentPage = useGameStore(s => s.currentPage);
   const money = useGameStore(s => s.money);
+  const playerWorkers = useGameStore(s => s.playerWorkers);
   const workers = useGameStore(s => s.workers);
   const log = useGameStore(s => s.log);
   const tickRateLevel = useGameStore(s => s.tickRateLevel);
@@ -32,6 +33,8 @@ export function App() {
   const canAfford = useGameStore(s => s.canAfford);
   const tickInterval = useGameStore(s => s.tickInterval);
   const latestPage = useGameStore(s => s.latestPage);
+  const doublingMultipliers = useGameStore(s => s.doublingMultipliers);
+  const doublingProgress = useGameStore(s => s.doublingProgress);
 
   // Force re-render at ~100ms for smooth UI updates
   useEffect(() => {
@@ -128,7 +131,7 @@ export function App() {
 
   // Build key prompt string
   const keyPrompt = TIERS.map((tier, i) => {
-    const count = workers[tier.id] || 0;
+    const count = playerWorkers[tier.id] || 0;
     const cost = getWorkerCost(tier, count);
     const can = money >= cost;
     const label = `[${i + 1}]${tier.name}`;
@@ -180,6 +183,10 @@ export function App() {
         <Box flexGrow={2}>
           <WorkersPanel
             workers={workers}
+            playerWorkers={playerWorkers}
+
+            doublingMultipliers={doublingMultipliers}
+            doublingProgress={doublingProgress}
             canAfford={canAfford}
           />
         </Box>

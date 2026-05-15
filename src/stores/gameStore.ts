@@ -6,6 +6,8 @@ import {
   getWorkerCost,
   getTickInterval,
   calcPagesPerSecond,
+  getDoublingMultiplier,
+  getDoublingProgress,
   TICK_RATE_BASE_COST,
   LOG_MAX_ENTRIES,
   EARNINGS_PER_PAGE,
@@ -38,6 +40,7 @@ interface GameState {
   currentPage: bigint;
   money: number;
   workers: Record<string, number>;
+  playerWorkers: Record<string, number>;
   log: LogEntry[];
   _fractionalPages: number;
   tickRateLevel: number;
@@ -48,6 +51,8 @@ interface GameState {
   canAfford: Record<string, boolean>;
   tickInterval: number;
   latestPage: string;
+  doublingMultipliers: Record<string, number>;
+  doublingProgress: Record<string, number>;
 }
 
 /**
@@ -56,6 +61,7 @@ interface GameState {
 interface GameActions {
   tick: (deltaMs: number) => void;
   hire: (tierId: string) => HireResult;
+  hireBulk: (tierId: string, count: number) => HireResult;
   upgradeTickRate: () => HireResult;
   reset: () => void;
 }
@@ -70,7 +76,7 @@ function addLogEntry(state: GameState, message: string): void {
 }
 
 /**
- * Compute worker cascade — cumulative sum from top
+ * Compute worker cascade — cumulative sum from top (only for `workers`, not `playerWorkers`)
  */
 function computeCascade(workers: Record<string, number>): Record<string, number> {
   const newWorkers: Record<string, number> = {};
@@ -86,16 +92,38 @@ function computeCascade(workers: Record<string, number>): Record<string, number>
 }
 
 /**
- * Compute affordability for all tiers
+ * Compute affordability for all tiers using player-bought counts
  */
 function computeCanAfford(
   money: number,
-  workers: Record<string, number>
+  playerWorkers: Record<string, number>
 ): Record<string, boolean> {
   const result: Record<string, boolean> = {};
   for (const tier of TIERS) {
-    const cost = getWorkerCost(tier, workers[tier.id] || 0);
+    const cost = getWorkerCost(tier, playerWorkers[tier.id] || 0);
     result[tier.id] = money >= cost;
+  }
+  return result;
+}
+
+/**
+ * Compute doubling multipliers for all tiers from player-bought counts
+ */
+function computeDoublingMultipliers(playerWorkers: Record<string, number>): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const tier of TIERS) {
+    result[tier.id] = getDoublingMultiplier(playerWorkers[tier.id] || 0);
+  }
+  return result;
+}
+
+/**
+ * Compute doubling progress (0-1) for all tiers from player-bought counts
+ */
+function computeDoublingProgress(playerWorkers: Record<string, number>): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const tier of TIERS) {
+    result[tier.id] = getDoublingProgress(playerWorkers[tier.id] || 0);
   }
   return result;
 }
@@ -111,10 +139,12 @@ export const useGameStore = create<GameState & GameActions>()(
       ...initial,
 
       // Derived state
-      pps: calcPagesPerSecond(initial.workers),
-      canAfford: computeCanAfford(initial.money, initial.workers),
+      pps: calcPagesPerSecond(initial.workers, getDoublingMultiplier(initial.playerWorkers.writer || 0)),
+      canAfford: computeCanAfford(initial.money, initial.playerWorkers),
       tickInterval: getTickInterval(initial.tickRateLevel),
       latestPage: generatePage(initial.currentPage),
+      doublingMultipliers: computeDoublingMultipliers(initial.playerWorkers),
+      doublingProgress: computeDoublingProgress(initial.playerWorkers),
 
       // --- Actions ---
 
@@ -129,10 +159,12 @@ export const useGameStore = create<GameState & GameActions>()(
           // Snapshot worker counts before cascade (for page generation)
           const oldWorkers = { ...state.workers };
 
-          // Apply transitive cascade
+          // Apply transitive cascade to `workers` only — `playerWorkers` is NOT modified
           state.workers = computeCascade(state.workers);
 
-          const pps = oldWorkers.writer ?? 0;
+          // Compute PPS using pre-cascade writers with their multiplier
+          const writerMultiplier = getDoublingMultiplier(state.playerWorkers.writer || 0);
+          const pps = (oldWorkers.writer ?? 0) * writerMultiplier;
           const pagesThisTick = pps * delta;
 
           // Update money
@@ -156,9 +188,12 @@ export const useGameStore = create<GameState & GameActions>()(
           }
 
           // Compute and update derived state in same transaction
-          state.pps = calcPagesPerSecond(state.workers);
-          state.canAfford = computeCanAfford(state.money, state.workers);
+          const postWorkerMultiplier = getDoublingMultiplier(state.playerWorkers.writer || 0);
+          state.pps = calcPagesPerSecond(state.workers, postWorkerMultiplier);
+          state.canAfford = computeCanAfford(state.money, state.playerWorkers);
           state.tickInterval = getTickInterval(state.tickRateLevel);
+          state.doublingMultipliers = computeDoublingMultipliers(state.playerWorkers);
+          state.doublingProgress = computeDoublingProgress(state.playerWorkers);
         });
       },
 
@@ -166,28 +201,51 @@ export const useGameStore = create<GameState & GameActions>()(
        * Attempt to purchase a worker of the given tier
        */
       hire: (tierId: string): HireResult => {
+        return useGameStore.getState().hireBulk(tierId, 1);
+      },
+
+      /**
+       * Attempt to purchase up to `count` workers of the given tier.
+       * Stops when money runs out. Returns result with count actually hired.
+       */
+      hireBulk: (tierId: string, count: number): HireResult => {
         const tier = TIERS.find(t => t.id === tierId);
         if (!tier) return { success: false, message: 'Unknown tier' };
+        if (count < 1) return { success: false, message: 'Count must be at least 1' };
 
-        // Read state before set (outside immer transaction)
         const currentState = useGameStore.getState();
-        const count = currentState.workers[tier.id] || 0;
-        const cost = getWorkerCost(tier, count);
-        const msg = `Hired ${tier.name} for ${formatMoney(cost)}`;
+        const startCount = currentState.playerWorkers[tier.id] || 0;
 
-        if (currentState.money < cost) {
+        let hired = 0;
+        let totalSpent = 0;
+        for (let i = 0; i < count; i++) {
+          const cost = getWorkerCost(tier, startCount + i);
+          if (currentState.money < totalSpent + cost) break;
+          totalSpent += cost;
+          hired++;
+        }
+
+        if (hired === 0) {
+          const cost = getWorkerCost(tier, startCount);
           return { success: false, message: `Not enough money (need ${formatMoney(cost)})` };
         }
 
+        const msg = hired === 1
+          ? `Hired ${tier.name} for ${formatMoney(totalSpent)}`
+          : `Hired ${hired} ${tier.name}s for ${formatMoney(totalSpent)}`;
+
         set(state => {
-          state.money -= cost;
-          state.workers[tier.id] = count + 1;
+          state.money -= totalSpent;
+          state.workers[tier.id] = (state.workers[tier.id] || 0) + hired;
+          state.playerWorkers[tier.id] = startCount + hired;
           addLogEntry(state, msg);
 
-          // Compute derived state
-          state.pps = calcPagesPerSecond(state.workers);
-          state.canAfford = computeCanAfford(state.money, state.workers);
+          const writerMultiplier = getDoublingMultiplier(state.playerWorkers.writer || 0);
+          state.pps = calcPagesPerSecond(state.workers, writerMultiplier);
+          state.canAfford = computeCanAfford(state.money, state.playerWorkers);
           state.tickInterval = getTickInterval(state.tickRateLevel);
+          state.doublingMultipliers = computeDoublingMultipliers(state.playerWorkers);
+          state.doublingProgress = computeDoublingProgress(state.playerWorkers);
         });
 
         return { success: true, message: msg };
@@ -217,9 +275,12 @@ export const useGameStore = create<GameState & GameActions>()(
           addLogEntry(state, msg);
 
           // Compute derived state
-          state.pps = calcPagesPerSecond(state.workers);
-          state.canAfford = computeCanAfford(state.money, state.workers);
+          const writerMultiplier = getDoublingMultiplier(state.playerWorkers.writer || 0);
+          state.pps = calcPagesPerSecond(state.workers, writerMultiplier);
+          state.canAfford = computeCanAfford(state.money, state.playerWorkers);
           state.tickInterval = getTickInterval(state.tickRateLevel);
+          state.doublingMultipliers = computeDoublingMultipliers(state.playerWorkers);
+          state.doublingProgress = computeDoublingProgress(state.playerWorkers);
         });
 
         return { success: true, message: msg };
@@ -232,10 +293,12 @@ export const useGameStore = create<GameState & GameActions>()(
         const init = createInitialState();
         set(() => ({
           ...init,
-          pps: calcPagesPerSecond(init.workers),
-          canAfford: computeCanAfford(init.money, init.workers),
+          pps: calcPagesPerSecond(init.workers, getDoublingMultiplier(init.playerWorkers.writer || 0)),
+          canAfford: computeCanAfford(init.money, init.playerWorkers),
           tickInterval: getTickInterval(init.tickRateLevel),
           latestPage: generatePage(init.currentPage),
+          doublingMultipliers: computeDoublingMultipliers(init.playerWorkers),
+          doublingProgress: computeDoublingProgress(init.playerWorkers),
         }));
       },
     };
