@@ -15,58 +15,7 @@ import {
 } from '../config.js';
 import { generatePage } from '../page.js';
 import { formatMoney } from '../format.js';
-
-/**
- * Log entry structure
- */
-interface LogEntry {
-  timestamp: string;
-  message: string;
-}
-
-/**
- * Hire result
- */
-interface HireResult {
-  success: boolean;
-  message: string;
-}
-
-/**
- * Main game state interface
- */
-interface GameState {
-  // Core state
-  pagesGenerated: bigint;
-  currentPage: bigint;
-  money: number;
-  workers: Record<string, number>;
-  playerWorkers: Record<string, number>;
-  log: LogEntry[];
-  _fractionalPages: number;
-  tickRateLevel: number;
-  tickRateCost: number;
-
-  // Derived state (computed in each action)
-  pps: number;
-  canAfford: Record<string, boolean>;
-  tickInterval: number;
-  tickSpeedMultiplier: number;
-  latestPage: string;
-  doublingMultipliers: Record<string, number>;
-  doublingProgress: Record<string, number>;
-}
-
-/**
- * Action functions
- */
-interface GameActions {
-  tick: (deltaMs: number) => void;
-  hire: (tierId: string) => HireResult;
-  hireBulk: (tierId: string, count: number) => HireResult;
-  upgradeTickRate: () => HireResult;
-  reset: () => void;
-}
+import type { LogEntry, HireResult, GameState, GameActions } from '../types.js';
 
 /**
  * Add a log entry to state
@@ -85,7 +34,7 @@ function computeCascade(workers: Record<string, number>): Record<string, number>
   let cumulativeAbove = 0;
 
   for (let i = TIERS.length - 1; i >= 0; i--) {
-    const tierId = TIERS[i].id;
+    const tierId = TIERS[i]!.id;
     newWorkers[tierId] = (workers[tierId] || 0) + cumulativeAbove;
     cumulativeAbove += workers[tierId] || 0;
   }
