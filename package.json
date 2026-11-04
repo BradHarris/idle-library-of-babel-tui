@@ -1,21 +1,18 @@
 {
   "name": "library-of-babel-idle",
   "version": "0.1.0",
-  "description": "A terminal-based idle/incremental game inspired by Borges' Library of Babel",
+  "description": "A web idle/incremental game inspired by Borges' Library of Babel",
   "type": "module",
-  "main": "src/index.tsx",
   "scripts": {
-    "start": "tsx src/index.tsx",
-    "dev": "tsx --watch src/index.tsx",
-    "dev:web": "vite --config web/vite.config.ts",
-    "build:web": "vite build --config web/vite.config.ts",
-    "typecheck": "tsc --noEmit"
+    "dev": "vite --config web/vite.config.ts",
+    "build": "vite build --config web/vite.config.ts",
+    "preview": "vite preview --config web/vite.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "npx tsx --test src/format.test.ts src/game.test.ts src/lcg.test.ts src/storageScale.test.ts"
   },
   "dependencies": {
-    "@types/react": "^18.2.0",
-    "chalk": "^5.3.0",
+    "@types/react": "^19.2.0",
     "immer": "^11.1.7",
-    "ink": "^4.0.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "zustand": "^5.0.13"

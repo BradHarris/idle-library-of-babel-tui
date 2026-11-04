@@ -52,7 +52,7 @@ export interface GameState {
   playerWorkers: Record<string, number>;
   log: LogEntry[];
   _tickCount: number;
-  _fractionalPages: number;
+  _fractionalPages: bigint;
   tickRateLevel: number;
   tickRateCost: number;
 
@@ -110,10 +110,4 @@ export interface LogPanelProps {
 
 export interface StorageScalePanelProps {
   pagesGenerated: bigint;
-}
-
-export interface SearchOverlayProps {
-  searchQuery: string;
-  searchResult: SearchResult | null;
-  inputValue: string;
 }

@@ -34,6 +34,14 @@ export function SearchDialog() {
     setResult(null);
   };
 
+  const handleOpenChange = (next: boolean): void => {
+    setOpen(next);
+    if (!next) {
+      setQuery('');
+      setResult(null);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Enter') {
       handleSearch();
@@ -41,7 +49,7 @@ export function SearchDialog() {
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Trigger asChild>
         <button className="px-3 py-1.5 text-sm bg-cyan-600 hover:bg-cyan-500 text-white rounded font-medium transition-colors cursor-pointer">
           🔍 Search

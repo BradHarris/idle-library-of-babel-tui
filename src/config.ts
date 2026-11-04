@@ -37,7 +37,7 @@ export interface InitialGameState {
   log: never[];
   lastTick: number;
   _tickCount: number;
-  _fractionalPages: number;
+  _fractionalPages: bigint;
   tickRateLevel: number;
   tickRateCost: number;
 }
@@ -62,7 +62,7 @@ export function createInitialState(): InitialGameState {
     log: [],
     lastTick: Date.now(),
     _tickCount: 0,
-    _fractionalPages: 0, // track fractional pages for boundary crossing
+    _fractionalPages: 0n, // track fractional pages as nanopages (×1e9) for boundary crossing
     tickRateLevel: 0,
     tickRateCost: TICK_RATE_BASE_COST,
   };

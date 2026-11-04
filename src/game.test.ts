@@ -24,7 +24,7 @@ describe('Game Engine — Tick', () => {
     useGameStore.setState(s => { s.workers.writer = 4; });
     useGameStore.getState().tick(500); // 0.5 seconds with 4 writers = 2 pages
     const state = useGameStore.getState();
-    assert.strictEqual(state._fractionalPages, 0, 'fractional pages accumulated to whole number');
+    assert.strictEqual(state._fractionalPages, 0n, 'fractional pages accumulated to whole number');
     assert.strictEqual(state.pagesGenerated, 2n, '2 pages from 4 writers × 0.5s');
     assert.strictEqual(state.money, 2, '$2 from 2 pages');
   });
@@ -33,17 +33,17 @@ describe('Game Engine — Tick', () => {
     resetStore();
     useGameStore.setState(s => {
       s.workers.writer = 1;
-      s._fractionalPages = 0;
+      s._fractionalPages = 0n;
       s.pagesGenerated = 0n;
       s.currentPage = 0n;
     });
     
     useGameStore.getState().tick(750); // 0.75 pages
-    assert.strictEqual(useGameStore.getState()._fractionalPages, 0.75, '0.75 fractional pages');
+    assert.strictEqual(useGameStore.getState()._fractionalPages, 750_000_000n, '0.75 pages = 750M nanopages');
     assert.strictEqual(useGameStore.getState().pagesGenerated, 0n, 'no whole pages yet');
     
     useGameStore.getState().tick(250); // 0.25 more = 1.0 total
-    assert.strictEqual(useGameStore.getState()._fractionalPages, 0, 'fractional pages cleared');
+    assert.strictEqual(useGameStore.getState()._fractionalPages, 0n, 'fractional pages cleared');
     assert.strictEqual(useGameStore.getState().pagesGenerated, 1n, '1 page generated');
   });
 
@@ -54,7 +54,7 @@ describe('Game Engine — Tick', () => {
       s.money = 100;
       s.pagesGenerated = 5n;
       s.currentPage = 5n;
-      s._fractionalPages = 0;
+      s._fractionalPages = 0n;
       s.log = [];
     });
     
@@ -63,7 +63,7 @@ describe('Game Engine — Tick', () => {
     
     assert.strictEqual(state.money, 100, 'money unchanged');
     assert.strictEqual(state.pagesGenerated, 5n, 'pages unchanged');
-    assert.strictEqual(state._fractionalPages, 0, 'fractional unchanged');
+    assert.strictEqual(state._fractionalPages, 0n, 'fractional unchanged');
   });
 
   it('tick updates money correctly with multiple writers', () => {

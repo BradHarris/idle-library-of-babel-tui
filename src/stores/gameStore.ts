@@ -17,6 +17,9 @@ import { generatePage } from '../page.js';
 import { formatMoney } from '../format.js';
 import type { LogEntry, HireResult, GameState, GameActions } from '../types.js';
 
+/** Precision for fractional page accumulation: 1e9 = nanopages */
+const FRACTIONAL_PRECISION = 1_000_000_000n;
+
 /**
  * Add a log entry to state
  */
@@ -124,10 +127,12 @@ export const useGameStore = create<GameState & GameActions>()(
           const moneyThisTick = pagesThisTick * EARNINGS_PER_PAGE;
           state.money += moneyThisTick;
 
-          // Track fractional pages and cross boundaries
-          state._fractionalPages += pagesThisTick;
-          const newPages = BigInt(Math.floor(state._fractionalPages));
-          state._fractionalPages -= Number(newPages);
+          // Track fractional pages and cross boundaries (BigInt fixed-point: nanopages)
+          const safePagesThisTick = Number.isFinite(pagesThisTick) ? pagesThisTick : 0;
+          const fractionalAdd = BigInt(Math.floor(safePagesThisTick * Number(FRACTIONAL_PRECISION)));
+          state._fractionalPages += fractionalAdd;
+          const newPages = state._fractionalPages / FRACTIONAL_PRECISION;
+          state._fractionalPages %= FRACTIONAL_PRECISION;
 
           if (newPages > 0n) {
             state.pagesGenerated += newPages;
