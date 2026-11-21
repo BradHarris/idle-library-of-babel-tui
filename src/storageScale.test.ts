@@ -1,3 +1,5 @@
+import { it } from 'vitest';
+import assert from 'node:assert/strict';
 import { computeStorageScale, pageOffsetFromLocation, locationFromPageOffset } from './storageScale.js';
 import { STORAGE_TIERS } from './config.js';
 import type { LocationTuple } from './types.js';
@@ -13,24 +15,17 @@ interface ScaleEntry {
 }
 
 function test(name: string, fn: ((...args: any[]) => any) | (() => boolean), args: any[], expected: any): void {
-  const result = typeof fn === 'function' ? (fn as (...args: any[]) => any)(...args) : fn;
-  let match: boolean;
-  if (Array.isArray(result) && Array.isArray(expected)) {
-    match = stringify(result) === stringify(expected);
-  } else {
-    match = String(result) === String(expected);
-  }
-  if (match) {
-    passed++;
-    console.log(`  ✓ ${name}(${args.map(a => String(a)).join(', ')})`);
-  } else {
-    failed++;
-    console.log(`  ✗ ${name}(${args.map(a => String(a)).join(', ')}) = ${stringify(result)} (expected ${stringify(expected)})`);
-  }
+  it(name, () => {
+    const result = typeof fn === 'function' ? (fn as (...args: any[]) => any)(...args) : fn;
+    let match: boolean;
+    if (Array.isArray(result) && Array.isArray(expected)) {
+      match = stringify(result) === stringify(expected);
+    } else {
+      match = String(result) === String(expected);
+    }
+    assert.ok(match, `${name}: got ${stringify(result)}, expected ${stringify(expected)}`);
+  });
 }
-
-let passed = 0;
-let failed = 0;
 
 // Pages per 32TB drive constant
 const PAGES_PER_DRIVE = (32n * 1024n ** 4n) / 280n; // 125,658,471,745
@@ -177,13 +172,9 @@ test('huge value', () => {
     [result[8]!.count === 0n, 'galaxies = 0'],
     [result[9]!.count === 0n, 'universes = 0'],
   ];
-  let allPassed = true;
   for (const [ok, label] of checks) {
-    if (ok) { console.log(`  ✓ huge value: ${label}`); }
-    else { allPassed = false; failed++; console.log(`  ✗ huge value: ${label}`); }
+    assert.ok(ok, `huge value: ${label}`);
   }
-  if (allPassed) passed++;
-  else failed++;
 }, [], undefined);
 
 // Verify always returns exactly 10 tiers
@@ -244,5 +235,3 @@ test('large page offset (> Number.MAX_SAFE_INTEGER)', () => {
   return back === huge;
 }, [], true);
 
-console.log(`\nResults: ${passed} passed, ${failed} failed, ${passed + failed} total`);
-process.exit(failed > 0 ? 1 : 0);

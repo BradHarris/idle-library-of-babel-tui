@@ -1,24 +1,19 @@
+import { it } from 'vitest';
+import assert from 'node:assert/strict';
 import { formatNumber, formatMoney, formatPageNumber, formatPagesPerSecond, wrapText } from './format.js';
 
 function test(name: string, fn: (...args: any[]) => any, args: any[], expected: any): void {
-  const result = fn(...args);
-  let match: boolean;
-  if (Array.isArray(result) && Array.isArray(expected)) {
-    match = JSON.stringify(result) === JSON.stringify(expected);
-  } else {
-    match = String(result) === String(expected);
-  }
-  if (match) {
-    passed++;
-    console.log(`  ✓ ${name}(${args.map(a => String(a)).join(', ')}) = ${result}`);
-  } else {
-    failed++;
-    console.log(`  ✗ ${name}(${args.map(a => String(a)).join(', ')}) = ${result} (expected ${expected})`);
-  }
+  it(name, () => {
+    const result = fn(...args);
+    let match: boolean;
+    if (Array.isArray(result) && Array.isArray(expected)) {
+      match = JSON.stringify(result) === JSON.stringify(expected);
+    } else {
+      match = String(result) === String(expected);
+    }
+    assert.ok(match, `${name}: got ${JSON.stringify(result)}, expected ${JSON.stringify(expected)}`);
+  });
 }
-
-let passed = 0;
-let failed = 0;
 
 // formatNumber tests
 test('formatNumber 0', formatNumber, [0], '0');
@@ -64,5 +59,3 @@ test('wrapText short', wrapText, ['hello', 80], ['hello']);
 test('wrapText long', wrapText, ['hello world this is a test', 10], ['hello worl', 'd this is ', 'a test']);
 test('wrapText exact', wrapText, ['abcdef', 6], ['abcdef']);
 
-console.log(`\nResults: ${passed} passed, ${failed} failed, ${passed + failed} total`);
-process.exit(failed > 0 ? 1 : 0);

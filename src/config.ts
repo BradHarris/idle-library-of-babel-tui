@@ -1,4 +1,4 @@
-import type { Tier, StorageTier } from './types.js';
+import type { Tier, StorageTier, GameState } from './types.js';
 
 /**
  * Worker tier definitions for the Library of Babel idle game.
@@ -16,7 +16,6 @@ export const TIERS: Tier[] = [
 ];
 
 export const TICK_INTERVAL = 1000;     // ms — base tick interval (1/sec)
-export const RENDER_INTERVAL = 100;    // ms — TUI re-render
 export const EARNINGS_PER_PAGE = 1;    // $1.00 per page
 export const PRNG_SEED_BITS = 32;      // 32-bit seed from SHA-256
 export const LOG_MAX_ENTRIES = 10;     // maximum log entries to retain
@@ -28,25 +27,11 @@ export const TICK_RATE_MIN_INTERVAL = 33;    // ms minimum (30 ticks/sec max)
 export const TICK_RATE_IMPROVEMENT_MS = 50;  // ms reduction per purchase
 export const TICK_RATE_CAP_LEVEL = 19;       // last level with real interval > 33ms
 
-export interface InitialGameState {
-  pagesGenerated: bigint;
-  currentPage: bigint;
-  money: number;
-  workers: Record<string, number>;
-  playerWorkers: Record<string, number>;
-  log: never[];
-  lastTick: number;
-  _tickCount: number;
-  _fractionalPages: number;
-  tickRateLevel: number;
-  tickRateCost: number;
-}
-
 /**
  * Create the initial game state.
  * Starts with 1 Writer, $0 money, 0 pages.
  */
-export function createInitialState(): InitialGameState {
+export function createInitialState(): GameState {
   const workers: Record<string, number> = {};
   const playerWorkers: Record<string, number> = {};
   for (const tier of TIERS) {
@@ -60,7 +45,6 @@ export function createInitialState(): InitialGameState {
     workers,
     playerWorkers,
     log: [],
-    lastTick: Date.now(),
     _tickCount: 0,
     _fractionalPages: 0, // track fractional pages for boundary crossing
     tickRateLevel: 0,
@@ -180,3 +164,62 @@ export const STORAGE_TIERS: StorageTier[] = [
   { id: 'galaxy',        name: 'Galaxies',                 emoji: '🌌',  multiplier: 1_000_000_000_000n },
   { id: 'universe',      name: 'Universes',                emoji: '🔭',  multiplier: 1_000_000_000_000n },
 ];
+
+// ─── Hiring ───────────────────────────────────────────────
+
+/**
+ * Total cost to hire `count` workers starting from `playerBoughtCount`.
+ */
+export function getBulkCost(tier: Tier, playerBoughtCount: number, count: number): number {
+  let total = 0;
+  for (let i = 0; i < count; i++) {
+    total += getWorkerCost(tier, playerBoughtCount + i);
+  }
+  return total;
+}
+
+/**
+ * How many workers (up to `limit`) can be bought with `money`, and what they cost.
+ */
+export function getAffordable(
+  tier: Tier,
+  playerBoughtCount: number,
+  money: number,
+  limit = Infinity
+): { count: number; cost: number } {
+  let count = 0;
+  let cost = 0;
+  while (count < limit) {
+    const next = getWorkerCost(tier, playerBoughtCount + count);
+    if (cost + next > money) break;
+    cost += next;
+    count++;
+  }
+  return { count, cost };
+}
+
+export type HireMode = 'one' | 'next' | 'max';
+
+/**
+ * Work out how many workers a hire in `mode` would buy and what it costs.
+ * - one:  a single worker
+ * - next: enough to reach the next doubling threshold
+ * - max:  as many as `money` allows (count 0 when none are affordable)
+ */
+export function planHire(
+  mode: HireMode,
+  tier: Tier,
+  playerBoughtCount: number,
+  money: number
+): { count: number; cost: number } {
+  if (mode === 'next') {
+    const threshold = getDoublingThresholds().find(t => t > playerBoughtCount);
+    const count = threshold ? threshold - playerBoughtCount : 1;
+    return { count, cost: getBulkCost(tier, playerBoughtCount, count) };
+  }
+  if (mode === 'max') {
+    const affordable = getAffordable(tier, playerBoughtCount, money);
+    return affordable.count > 0 ? affordable : { count: 0, cost: getWorkerCost(tier, playerBoughtCount) };
+  }
+  return { count: 1, cost: getWorkerCost(tier, playerBoughtCount) };
+}
