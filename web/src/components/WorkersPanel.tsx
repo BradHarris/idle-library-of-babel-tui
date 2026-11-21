@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal, useContext } from 'solid-js';
-import { TIERS, getWorkerCost, planHire, type HireMode } from '@game/config';
+import { TIERS, planHire, type HireMode } from '@game/config';
 import { formatNumber, formatMoney } from '@game/format';
 import type { Tier } from '@game/types';
 import { GameContext } from '../game';
@@ -14,101 +14,78 @@ export function WorkersPanel() {
   const [hireMode, setHireMode] = createSignal<HireMode>('one');
 
   return (
-    <div class="border border-green-500/50 rounded-lg p-3 bg-gray-900/50">
-      <div class="flex items-center justify-between mb-2">
-        <h2 class="text-sm font-semibold text-green-400">👥 Workers</h2>
-        <div class="flex gap-3 text-xs">
+    <div>
+      <div class="mb-2 flex items-center justify-between">
+        <h2 class="section-title">Workers</h2>
+        <div role="group" aria-label="Hire amount" class="flex rounded-full border border-rule p-0.5 text-xs">
           <For each={MODES}>
             {m => (
-              <label class="flex items-center gap-1 text-gray-400 hover:text-gray-300 cursor-pointer">
-                <input
-                  type="radio"
-                  name="hireMode"
-                  checked={hireMode() === m.mode}
-                  onChange={() => setHireMode(m.mode)}
-                  class="accent-green-500"
-                />
+              <button
+                aria-pressed={hireMode() === m.mode ? 'true' : 'false'}
+                onClick={() => setHireMode(m.mode)}
+                class={[
+                  'min-w-12 cursor-pointer rounded-full px-3 py-1 transition-colors',
+                  hireMode() === m.mode ? 'bg-ink text-paper' : 'text-ink-muted hover:text-ink',
+                ]}
+              >
                 {m.label}
-              </label>
+              </button>
             )}
           </For>
         </div>
       </div>
-      <div class="space-y-2">
-        <For each={TIERS}>
-          {(tier, i) => <WorkerRow tier={tier} index={i()} mode={hireMode()} />}
-        </For>
-      </div>
+      <ul class="divide-y divide-rule border-y border-rule">
+        <For each={TIERS}>{tier => <WorkerRow tier={tier} mode={hireMode()} />}</For>
+      </ul>
     </div>
   );
 }
 
-function WorkerRow(props: { tier: Tier; index: number; mode: HireMode }) {
+function WorkerRow(props: { tier: Tier; mode: HireMode }) {
   const game = useContext(GameContext);
 
   const playerCount = createMemo(() => game.state.playerWorkers[props.tier.id] || 0);
+  const totalCount = createMemo(() => game.state.workers[props.tier.id] || 0);
   const plan = createMemo(() => planHire(props.mode, props.tier, playerCount(), game.state.money));
   const disabled = createMemo(() => plan().count === 0 || game.state.money < plan().cost);
-  const label = createMemo(() => {
-    const { count, cost } = plan();
-    if (count > 1) return `${props.mode === 'next' ? 'Next' : 'Max'} ×${count}  ${formatMoney(cost)}`;
-    if (props.mode === 'max' && count === 1) return `Hire  ${formatMoney(cost)}`;
-    return 'Hire';
-  });
   const multiplier = () => game.doublingMultipliers()[props.tier.id] || 1;
   const progressPct = () => Math.round((game.doublingProgress()[props.tier.id] ?? 0) * 100);
 
   return (
-    <div class="border-b border-gray-800 last:border-0 pb-2 last:pb-0">
-      <div class="flex items-center justify-between">
-        <div class="flex-1">
-          <div class="flex items-center gap-2">
-            <span class={['font-medium text-sm', playerCount() > 0 ? 'text-white' : 'text-gray-500']}>
-              {props.tier.name}
-            </span>
-            <span class="text-xs text-gray-500">[{props.index + 1}]</span>
-            <Show when={multiplier() > 1}>
-              <span class="text-xs font-semibold text-yellow-400">×{multiplier()}</span>
-            </Show>
-          </div>
-          <div class="flex gap-4 text-xs text-gray-400 mt-0.5">
-            <span>
-              Count: <span class="text-white font-mono">{formatNumber(playerCount())}</span>
-            </span>
-            <span>
-              Total:{' '}
-              <span class="text-green-300 font-mono">
-                {formatNumber(game.state.workers[props.tier.id] || 0)}
-              </span>
-            </span>
-            <span>
-              Cost:{' '}
-              <span class="text-white font-mono">
-                {formatMoney(getWorkerCost(props.tier, playerCount()))}
-              </span>
-            </span>
-          </div>
-          {/* Doubling progress bar */}
-          <div class="mt-1 h-1 bg-gray-800 rounded-full overflow-hidden">
-            <div
-              class="h-full bg-green-500/60 rounded-full transition-all"
-              style={{ width: `${progressPct()}%` }}
-            />
-          </div>
+    <li class="flex items-center gap-3 py-3">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-baseline gap-2">
+          <span class={['text-base', playerCount() > 0 ? 'text-ink' : 'text-ink-muted']}>
+            {props.tier.name}
+          </span>
+          <Show when={multiplier() > 1}>
+            <span class="font-mono text-xs font-semibold text-accent">×{multiplier()}</span>
+          </Show>
+          <span class="ml-auto font-mono text-sm tabular-nums">{formatNumber(playerCount())}</span>
         </div>
-        <button
-          onClick={() => game.hireBulk(props.tier.id, Math.max(1, plan().count))}
-          disabled={disabled()}
-          class={[
-            'ml-3 px-3 py-1 text-xs rounded font-medium whitespace-nowrap transition-colors',
-            disabled()
-              ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-              : 'bg-green-600 hover:bg-green-500 text-white cursor-pointer',
-          ]}
-        >
-          {label()}
-        </button>
+        <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-rule">
+          <div class="h-full rounded-full bg-accent/70 transition-all" style={{ width: `${progressPct()}%` }} />
+        </div>
+        <Show when={totalCount() > playerCount()}>
+          <p class="mt-1 text-xs text-ink-muted">
+            +<span class="font-mono tabular-nums">{formatNumber(totalCount() - playerCount())}</span> from above
+          </p>
+        </Show>
       </div>
-    </div>
+      <button
+        data-tier={props.tier.id}
+        onClick={() => game.hireBulk(props.tier.id, Math.max(1, plan().count))}
+        disabled={disabled()}
+        class={[
+          'flex min-h-11 w-24 shrink-0 flex-col items-center justify-center rounded-md border px-2 py-1 leading-tight transition-colors',
+          disabled()
+            ? 'cursor-not-allowed border-rule text-ink-muted'
+            : 'cursor-pointer border-accent bg-accent text-paper hover:bg-accent-hover',
+        ]}
+      >
+        <span class="text-xs">{plan().count > 1 ? `×${plan().count}` : 'Hire'}</span>
+        <span class="font-mono text-xs tabular-nums">{formatMoney(plan().cost)}</span>
+      </button>
+    </li>
   );
 }

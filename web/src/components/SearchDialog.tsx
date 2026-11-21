@@ -1,6 +1,6 @@
-import { For, Match, Switch, createSignal, useContext } from 'solid-js';
+import { Match, Switch, createSignal, useContext } from 'solid-js';
 import { searchLibrary } from '@game/search';
-import { formatPageNumber, formatLocationDisplay, wrapText } from '@game/format';
+import { formatPageNumber, formatLocationDisplay } from '@game/format';
 import type { SearchResult } from '@game/types';
 import { GameContext } from '../game';
 
@@ -39,9 +39,13 @@ export function SearchDialog() {
     <>
       <button
         onClick={open}
-        class="px-3 py-1.5 text-sm bg-cyan-600 hover:bg-cyan-500 text-white rounded font-medium transition-colors cursor-pointer"
+        aria-label="Search the library"
+        class="-mr-2 flex size-10 cursor-pointer items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-paper-deep hover:text-ink"
       >
-        🔍 Search
+        <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
       </button>
 
       <dialog
@@ -51,23 +55,36 @@ export function SearchDialog() {
           // A click on the backdrop lands on the dialog element itself
           if (e.target === e.currentTarget) dialog.close();
         }}
-        class="m-auto w-full max-w-lg bg-gray-900 text-gray-100 border border-cyan-500/50 rounded-xl shadow-2xl p-6 outline-none backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+        class="mx-auto mt-auto mb-0 max-h-[85dvh] w-full max-w-full overflow-y-auto rounded-t-2xl border border-rule bg-paper p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] text-ink shadow-2xl outline-none backdrop:bg-ink/40 backdrop:backdrop-blur-sm sm:my-auto sm:max-w-lg sm:rounded-2xl sm:pb-5"
       >
-        <h2 class="text-lg font-bold text-cyan-400 mb-4">🔍 Search the Library</h2>
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="font-serif text-lg italic">Search the Library</h2>
+          <button
+            onClick={() => dialog.close()}
+            aria-label="Close"
+            class="-mr-2 flex size-9 cursor-pointer items-center justify-center rounded-full text-ink-muted hover:bg-paper-deep hover:text-ink"
+          >
+            <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
 
-        <div class="flex gap-2 mb-4">
+        <div class="flex gap-2">
           <input
             ref={input}
-            type="text"
+            type="search"
+            enterkeyhint="search"
+            aria-label="Phrase to search for"
             onKeyDown={e => {
               if (e.key === 'Enter') search();
             }}
-            placeholder="Enter a phrase to search..."
-            class="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500"
+            placeholder="A phrase…"
+            class="min-w-0 flex-1 rounded-md border border-rule bg-paper-deep px-3 py-2 text-base placeholder-ink-muted focus:border-accent focus:outline-none"
           />
           <button
             onClick={search}
-            class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm rounded font-medium transition-colors cursor-pointer"
+            class="cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-accent-hover"
           >
             Search
           </button>
@@ -76,52 +93,39 @@ export function SearchDialog() {
         <Switch>
           <Match when={found()}>
             {r => (
-              <div class="space-y-3 text-sm">
-                <div class="flex justify-between">
-                  <span class="text-gray-400">Page:</span>
-                  <span class="text-green-400 font-mono">{formatPageNumber(r().address)}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-gray-400">Location:</span>
-                  <span class="text-green-400">{formatLocationDisplay(r().location)}</span>
-                </div>
-                <div>
-                  <span class="text-gray-400 block mb-1">Content:</span>
-                  <div class="font-mono text-xs text-gray-300 bg-gray-800 rounded p-2 whitespace-pre-wrap break-all leading-relaxed">
-                    <For each={wrapText(r().content, 55)} keyed={false}>
-                      {line => <div>{line()}</div>}
-                    </For>
-                  </div>
-                </div>
+              <div class="mt-5 space-y-3 text-sm">
+                <dl class="divide-y divide-rule border-y border-rule">
+                  <Row label="Page" value={formatPageNumber(r().address)} />
+                  <Row label="Location" value={formatLocationDisplay(r().location)} />
+                </dl>
+                <p class="rounded-sm border border-rule bg-paper-deep p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
+                  {r().content}
+                </p>
               </div>
             )}
           </Match>
           <Match when={notFound()}>
             {r => (
-              <div class="space-y-2 text-sm">
-                <p class="text-yellow-400 font-medium">Not yet discovered</p>
-                <div class="flex justify-between">
-                  <span class="text-gray-400">Target page:</span>
-                  <span class="text-yellow-400 font-mono">{formatPageNumber(r().address)}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-gray-400">Pages generated:</span>
-                  <span class="text-gray-400 font-mono">{formatPageNumber(r().pagesGenerated)}</span>
-                </div>
+              <div class="mt-5 text-sm">
+                <p class="mb-2 italic text-accent">Not yet discovered</p>
+                <dl class="divide-y divide-rule border-y border-rule">
+                  <Row label="Target page" value={formatPageNumber(r().address)} />
+                  <Row label="Pages generated" value={formatPageNumber(r().pagesGenerated)} />
+                </dl>
               </div>
             )}
           </Match>
         </Switch>
-
-        <div class="mt-4 flex justify-end">
-          <button
-            onClick={() => dialog.close()}
-            class="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors cursor-pointer"
-          >
-            Close
-          </button>
-        </div>
       </dialog>
     </>
+  );
+}
+
+function Row(props: { label: string; value: string }) {
+  return (
+    <div class="flex items-baseline justify-between gap-4 py-2">
+      <dt class="text-ink-muted">{props.label}</dt>
+      <dd class="min-w-0 text-right font-mono break-all">{props.value}</dd>
+    </div>
   );
 }

@@ -21,11 +21,8 @@ function mount() {
   return root;
 }
 
-function text(root: HTMLElement, label: string): string {
-  const row = [...root.querySelectorAll('div.flex')].find(el =>
-    el.firstElementChild?.textContent?.startsWith(label)
-  );
-  return row?.lastElementChild?.textContent ?? '';
+function stat(root: HTMLElement, name: string): string {
+  return root.querySelector(`[data-stat="${name}"]`)?.textContent ?? '';
 }
 
 describe('App', () => {
@@ -40,16 +37,29 @@ describe('App', () => {
         // 1 writer → 1 page/sec; 15 ticks earn $15, the cost of a second writer
         vi.advanceTimersByTime(15_000);
         flush();
-        const hire = [...root.querySelectorAll('button')].find(b => b.textContent === 'Hire')!;
-        hire.click();
+        root.querySelector<HTMLButtonElement>('button[data-tier="writer"]')!.click();
       },
       { scenario: 'tick-and-hire' }
     );
 
     expect(artifact).toHaveNoDiagnostics();
-    expect(text(root, 'Pages Generated:')).toBe('15');
+    expect(stat(root, 'pages')).toBe('15');
     expect(root.textContent).toContain('Hired Writer for');
-    expect(text(root, 'Pages/sec:')).toBe('2');
+    expect(stat(root, 'pps')).toBe('2');
+  });
+
+  it('bottom tabs switch the visible panel', () => {
+    const root = mount();
+    flush();
+    const panel = (id: string) => root.querySelector(`[data-panel="${id}"]`)!;
+    expect(panel('workers').classList.contains('hidden')).toBe(false);
+    expect(panel('log').classList.contains('hidden')).toBe(true);
+
+    root.querySelector<HTMLButtonElement>('[data-tab="log"]')!.click();
+    flush();
+    expect(root.querySelector('[data-tab="log"]')!.getAttribute('aria-current')).toBe('page');
+    expect(panel('log').classList.contains('hidden')).toBe(false);
+    expect(panel('workers').classList.contains('hidden')).toBe(true);
   });
 
   it('search reports a phrase as not yet discovered at the start', () => {

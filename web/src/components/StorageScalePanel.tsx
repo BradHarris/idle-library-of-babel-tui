@@ -1,4 +1,4 @@
-import { For, createMemo, useContext } from 'solid-js';
+import { For, Show, createMemo, useContext } from 'solid-js';
 import { computeStorageScale } from '@game/storageScale';
 import { formatNumber } from '@game/format';
 import { GameContext } from '../game';
@@ -6,21 +6,32 @@ import { GameContext } from '../game';
 export function StorageScalePanel() {
   const game = useContext(GameContext);
   const scale = createMemo(() => computeStorageScale(game.state.pagesGenerated));
+  /** Tiers already filled, largest first. */
+  const filled = createMemo(() => scale().filter(t => t.count > 0n).reverse());
+  /** The smallest tier not yet reached: the next goal. */
+  const next = createMemo(() => scale().find(t => t.count === 0n));
 
   return (
-    <div class="border border-cyan-500/50 rounded-lg p-3 bg-gray-900/50">
-      <h2 class="text-sm font-semibold text-cyan-400 mb-2">📦 Storage Scale</h2>
-      <div class="space-y-1 text-sm">
-        <For each={scale()} keyed={false}>
+    <div>
+      <h2 class="section-title mb-2">Storage</h2>
+      <ul class="divide-y divide-rule border-y border-rule text-sm">
+        <For each={filled()} keyed={false}>
           {tier => (
-            <div class="flex items-center gap-2">
-              <span class="text-base">{tier().emoji}</span>
-              <span class="text-gray-400 flex-1 truncate">{tier().name}</span>
-              <span class="text-white font-mono">{formatNumber(Number(tier().count))}</span>
-            </div>
+            <li class="flex items-baseline justify-between gap-3 py-2">
+              <span>{tier().name}</span>
+              <span class="font-mono tabular-nums">{formatNumber(Number(tier().count))}</span>
+            </li>
           )}
         </For>
-      </div>
+        <Show when={next()}>
+          {tier => (
+            <li class="flex items-baseline justify-between gap-3 py-2 text-ink-muted italic">
+              <span>Next: {tier().name}</span>
+              <span class="font-mono not-italic">—</span>
+            </li>
+          )}
+        </Show>
+      </ul>
     </div>
   );
 }
