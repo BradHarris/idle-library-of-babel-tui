@@ -3,9 +3,11 @@ import { searchLibrary } from '@game/search';
 import { formatPageNumber, formatLocationDisplay } from '@game/format';
 import type { SearchResult } from '@game/types';
 import { GameContext } from '../game';
+import { UiContext } from '../ui';
 
 export function SearchDialog() {
   const game = useContext(GameContext);
+  const ui = useContext(UiContext);
   const [result, setResult] = createSignal<SearchResult | null>(null);
   let dialog!: HTMLDialogElement;
   let input!: HTMLInputElement;
@@ -24,6 +26,16 @@ export function SearchDialog() {
   const onClose = () => {
     setResult(null);
     input.value = '';
+  };
+
+  const showOnMap = (address: bigint) => {
+    const generated = game.state.pagesGenerated;
+    ui.zoomTo(address, generated > 0n ? generated - 1n : 0n);
+    ui.setTab('library');
+    dialog.close();
+    requestAnimationFrame(() =>
+      document.getElementById('storage-map')?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    );
   };
 
   const found = () => {
@@ -101,6 +113,7 @@ export function SearchDialog() {
                 <p class="rounded-sm border border-rule bg-paper-deep p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
                   {r().content}
                 </p>
+                <ShowOnMap onClick={() => showOnMap(r().address)} />
               </div>
             )}
           </Match>
@@ -112,6 +125,9 @@ export function SearchDialog() {
                   <Row label="Target page" value={formatPageNumber(r().address)} />
                   <Row label="Pages generated" value={formatPageNumber(r().pagesGenerated)} />
                 </dl>
+                <div class="mt-3">
+                  <ShowOnMap onClick={() => showOnMap(r().address)} />
+                </div>
               </div>
             )}
           </Match>
@@ -127,5 +143,17 @@ function Row(props: { label: string; value: string }) {
       <dt class="text-ink-muted">{props.label}</dt>
       <dd class="min-w-0 text-right font-mono break-all">{props.value}</dd>
     </div>
+  );
+}
+
+function ShowOnMap(props: { onClick: () => void }) {
+  return (
+    <button
+      data-show-on-map
+      onClick={() => props.onClick()}
+      class="w-full cursor-pointer rounded-md border border-accent px-4 py-2 text-sm text-accent transition-colors hover:bg-accent hover:text-paper"
+    >
+      Show on map
+    </button>
   );
 }

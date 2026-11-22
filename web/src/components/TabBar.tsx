@@ -1,6 +1,5 @@
 import { For } from 'solid-js';
-
-export type Tab = 'workers' | 'library' | 'log';
+import type { Tab } from '../ui';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'workers', label: 'Workers' },

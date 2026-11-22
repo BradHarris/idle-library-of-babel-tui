@@ -72,6 +72,11 @@ function computeCascade(workers: Record<string, number>): Record<string, number>
   return next;
 }
 
+function sameRecord<T>(a: Record<string, T>, b: Record<string, T>): boolean {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every(k => a[k] === b[k]);
+}
+
 function perTier<T>(fn: (tierId: string) => T): Record<string, T> {
   const result: Record<string, T> = {};
   for (const tier of TIERS) result[tier.id] = fn(tier.id);
@@ -88,8 +93,9 @@ export function createGameStore(): GameStore {
       calcPagesPerSecond(state.workers, getDoublingMultiplier(state.playerWorkers.writer || 0)) *
       tickSpeedMultiplier()
   );
-  const canAfford = createMemo(() =>
-    perTier(id => state.money >= getWorkerCost(TIERS.find(t => t.id === id)!, state.playerWorkers[id] || 0))
+  const canAfford = createMemo(
+    () => perTier(id => state.money >= getWorkerCost(TIERS.find(t => t.id === id)!, state.playerWorkers[id] || 0)),
+    { equals: sameRecord }
   );
   const latestPage = createMemo(() => generatePage(state.currentPage));
   const doublingMultipliers = createMemo(() =>

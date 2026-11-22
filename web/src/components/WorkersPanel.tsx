@@ -46,7 +46,9 @@ function WorkerRow(props: { tier: Tier; mode: HireMode }) {
 
   const playerCount = createMemo(() => game.state.playerWorkers[props.tier.id] || 0);
   const totalCount = createMemo(() => game.state.workers[props.tier.id] || 0);
-  const plan = createMemo(() => planHire(props.mode, props.tier, playerCount(), game.state.money));
+  const plan = createMemo(() => planHire(props.mode, props.tier, playerCount(), game.state.money), {
+    equals: (a, b) => a.count === b.count && a.cost === b.cost,
+  });
   const disabled = createMemo(() => plan().count === 0 || game.state.money < plan().cost);
   const multiplier = () => game.doublingMultipliers()[props.tier.id] || 1;
   const progressPct = () => Math.round((game.doublingProgress()[props.tier.id] ?? 0) * 100);

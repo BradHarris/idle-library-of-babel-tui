@@ -7,9 +7,11 @@ export function StorageScalePanel() {
   const game = useContext(GameContext);
   const scale = createMemo(() => computeStorageScale(game.state.pagesGenerated));
   /** Tiers already filled, largest first. */
-  const filled = createMemo(() => scale().filter(t => t.count > 0n).reverse());
+  const filled = createMemo(() => scale().filter(t => t.count > 0n).reverse(), {
+    equals: (a, b) => a.length === b.length && a.every((t, i) => t.count === b[i]!.count),
+  });
   /** The smallest tier not yet reached: the next goal. */
-  const next = createMemo(() => scale().find(t => t.count === 0n));
+  const next = createMemo(() => scale().find(t => t.count === 0n)?.name);
 
   return (
     <div>
@@ -24,9 +26,9 @@ export function StorageScalePanel() {
           )}
         </For>
         <Show when={next()}>
-          {tier => (
+          {name => (
             <li class="flex items-baseline justify-between gap-3 py-2 text-ink-muted italic">
-              <span>Next: {tier().name}</span>
+              <span>Next: {name()}</span>
               <span class="font-mono not-italic">—</span>
             </li>
           )}
