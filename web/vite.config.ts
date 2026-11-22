@@ -23,6 +23,6 @@ export default defineConfig({
   test: {
     root: path.resolve(__dirname, '..'),
     environment: 'jsdom',
-    include: ['src/**/*.test.ts', 'web/src/**/*.test.tsx'],
+    include: ['src/**/*.test.ts', 'web/src/**/*.test.ts', 'web/src/**/*.test.tsx'],
   },
 });

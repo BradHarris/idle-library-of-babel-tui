@@ -75,6 +75,10 @@ export interface GameState {
   /** Searches made, and how many found an already-written page (for achievements). */
   searches: number;
   searchesFound: number;
+  /** Seconds of offline boost left (banked from time away, spent by ticks). */
+  boostSeconds: number;
+  /** Bought upgrade ids, in purchase order. */
+  upgrades: string[];
 }
 
 // ─── Search ───────────────────────────────────────────────

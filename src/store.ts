@@ -1,8 +1,10 @@
-import { createMemo, createStore, onSettled, type Accessor, type Store } from 'solid-js';
+import { createMemo, createStore, onSettled, snapshot, type Accessor, type Store } from 'solid-js';
 import {
   TIERS,
   TICK_MS,
+  AUTOSAVE_MS,
   LOG_MAX_ENTRIES,
+  OFFLINE_BOOST_MULTIPLIER,
   createInitialState,
   getWorkerCost,
   getDoublingMultiplier,
@@ -11,10 +13,30 @@ import {
   getSpeedMultiplier,
 } from './config.js';
 import { FEATURE_UNLOCKS, achievementMultiplier, checkAchievements, hasAchievement } from './achievements.js';
-import { advance, buySpeed, buyWorkers, globalMultiplier, pagesPerSecond, productionPerSecond } from './economy.js';
+import {
+  advance,
+  bankOffline,
+  buySpeed,
+  buyWorkers,
+  globalMultiplier,
+  pagesPerSecond,
+  productionPerSecond,
+  tierMultiplier,
+} from './economy.js';
+import {
+  availableUpgrades,
+  buyUpgrade,
+  getUpgrade,
+  isUnlocked,
+  nextLocked,
+  requirementText,
+  upgradeGlobalMultiplier,
+  type Upgrade,
+} from './upgrades.js';
 import { Decimal } from './bignum.js';
 import { generatePage } from './page.js';
-import { formatMoney, formatMultiplier, formatPrice } from './format.js';
+import { formatDuration, formatMoney, formatMultiplier, formatPrice } from './format.js';
+import { writeSave } from './save.js';
 import type { GameState, HireResult } from './types.js';
 
 /**
@@ -40,23 +62,40 @@ export interface GameStore {
   readonly latestPage: Accessor<string>;
   readonly doublingMultipliers: Accessor<Record<string, number>>;
   readonly doublingProgress: Accessor<Record<string, number>>;
+  /** Each tier's whole output multiplier: doubling bonus × upgrades. */
+  readonly tierMultipliers: Accessor<Record<string, number>>;
   /** Workers of the tier below that each tier makes per second (0 for writers). */
   readonly production: Accessor<Record<string, Decimal>>;
   readonly speedCost: Accessor<Decimal>;
   readonly speedMultiplier: Accessor<Decimal>;
   readonly achievementMultiplier: Accessor<Decimal>;
-  /** "Faster" × achievements: multiplies page output. */
+  /** Page output multiplier from bought global upgrades. */
+  readonly upgradeMultiplier: Accessor<Decimal>;
+  /** Unlocked upgrades not yet bought. */
+  readonly availableUpgrades: Accessor<Upgrade[]>;
+  /** The next locked upgrade in each group, as teasers. */
+  readonly lockedUpgrades: Accessor<Upgrade[]>;
+  /** How many upgrades can be bought right now ("Faster" counts as one). */
+  readonly purchasableUpgrades: Accessor<number>;
+  /** "Faster" × achievements × upgrades: multiplies page output. */
   readonly globalMultiplier: Accessor<Decimal>;
   /** Features unlocked by achievements. */
   readonly features: Accessor<{ hireNext: boolean; hireMax: boolean }>;
+  /** Offline boost: whether it's running and whole seconds left. */
+  readonly boost: Accessor<{ active: boolean; secondsLeft: number }>;
 
   // Actions
   tick(deltaMs: number): void;
   hire(tierId: string): HireResult;
   hireBulk(tierId: string, count: number): HireResult;
   upgradeSpeed(): HireResult;
+  buyUpgrade(id: string): HireResult;
   /** Note a search (for achievements); `found` if the page was already written. */
   recordSearch(found: boolean): void;
+  /** Bank `awaySeconds` of time away as offline boost; returns the boost seconds added. */
+  bankOffline(awaySeconds: number): number;
+  /** Replace the whole game, e.g. with an imported save. */
+  load(state: GameState): void;
   reset(): void;
 }
 
@@ -74,6 +113,22 @@ function unlockAchievements(state: GameState): void {
   }
 }
 
+/**
+ * Bank time away as offline boost and log it. Mutates `state`: a store draft,
+ * or a plain loaded save before it goes into the store. Returns the boost
+ * seconds added.
+ */
+export function welcomeBack(state: GameState, awaySeconds: number): number {
+  const added = bankOffline(state, awaySeconds);
+  if (added >= 1) {
+    addLogEntry(
+      state,
+      `Welcome back: away ${formatDuration(awaySeconds)}, ${OFFLINE_BOOST_MULTIPLIER}× output for ${formatDuration(state.boostSeconds)}`
+    );
+  }
+  return added;
+}
+
 function same(a: unknown, b: unknown): boolean {
   return a instanceof Decimal && b instanceof Decimal ? a.eq(b) : a === b;
 }
@@ -86,14 +141,19 @@ function sameRecord<T>(a: Record<string, T>, b: Record<string, T>): boolean {
 /** Memo options for Decimal results: equal values don't notify. */
 const decimalEquals = { equals: (a: Decimal, b: Decimal) => a.eq(b) };
 
+/** Memo options for upgrade lists: the same ids in the same order don't notify. */
+const upgradeListEquals = {
+  equals: (a: Upgrade[], b: Upgrade[]) => a.length === b.length && a.every((u, i) => u === b[i]),
+};
+
 function perTier<T>(fn: (tierId: string, index: number) => T): Record<string, T> {
   const result: Record<string, T> = {};
   TIERS.forEach((tier, i) => (result[tier.id] = fn(tier.id, i)));
   return result;
 }
 
-export function createGameStore(): GameStore {
-  const [state, setState] = createStore<GameState>(createInitialState());
+export function createGameStore(initial?: GameState): GameStore {
+  const [state, setState] = createStore<GameState>(initial ?? createInitialState());
 
   const speedMultiplier = createMemo(() => getSpeedMultiplier(state.speedLevel), decimalEquals);
   const speedCost = createMemo(() => getSpeedCost(state.speedLevel), decimalEquals);
@@ -114,12 +174,23 @@ export function createGameStore(): GameStore {
   const production = createMemo(() => perTier((_, i) => (i === 0 ? Decimal.ZERO : productionPerSecond(state, i))), {
     equals: sameRecord,
   });
+  const tierMultipliers = createMemo(() => perTier(id => tierMultiplier(state, id)), { equals: sameRecord });
+  const upgradeMult = createMemo(() => upgradeGlobalMultiplier(state), decimalEquals);
+  const available = createMemo(() => availableUpgrades(state), upgradeListEquals);
+  const locked = createMemo(() => nextLocked(state), upgradeListEquals);
+  const purchasable = createMemo(
+    () => available().filter(u => state.money.gte(u.cost)).length + (state.money.gte(speedCost()) ? 1 : 0)
+  );
   const features = createMemo(
     () => ({
       hireNext: hasAchievement(state, FEATURE_UNLOCKS.hireNext),
       hireMax: hasAchievement(state, FEATURE_UNLOCKS.hireMax),
     }),
     { equals: (a, b) => a.hireNext === b.hireNext && a.hireMax === b.hireMax }
+  );
+  const boost = createMemo(
+    () => ({ active: state.boostSeconds > 0, secondsLeft: Math.ceil(state.boostSeconds) }),
+    { equals: (a, b) => a.active === b.active && a.secondsLeft === b.secondsLeft }
   );
 
   function tick(deltaMs: number): void {
@@ -169,12 +240,49 @@ export function createGameStore(): GameStore {
     return result;
   }
 
+  function purchaseUpgrade(id: string): HireResult {
+    const upgrade = getUpgrade(id);
+    if (!upgrade) return { success: false, message: 'Unknown upgrade' };
+
+    let result: HireResult = { success: false, message: '' };
+    setState(s => {
+      if (s.upgrades.includes(id)) {
+        result = { success: false, message: 'Already bought' };
+        return;
+      }
+      if (buyUpgrade(s, id) === null) {
+        result = isUnlocked(s, upgrade)
+          ? { success: false, message: `Not enough money (need ${formatPrice(upgrade.cost)})` }
+          : { success: false, message: `Locked: ${requirementText(upgrade)}` };
+        return;
+      }
+      const message = `Upgrade: ${upgrade.name} (${upgrade.description})`;
+      addLogEntry(s, message);
+      unlockAchievements(s);
+      result = { success: true, message };
+    });
+    return result;
+  }
+
   function recordSearch(found: boolean): void {
     setState(s => {
       s.searches += 1;
       if (found) s.searchesFound += 1;
       unlockAchievements(s);
     });
+  }
+
+  function bankAway(awaySeconds: number): number {
+    let added = 0;
+    setState(s => {
+      added = welcomeBack(s, awaySeconds);
+    });
+    return added;
+  }
+
+  function load(next: GameState): void {
+    // Returning a value from the setter replaces the store's top-level fields
+    setState(() => next);
   }
 
   function reset(): void {
@@ -190,29 +298,98 @@ export function createGameStore(): GameStore {
     latestPage,
     doublingMultipliers,
     doublingProgress,
+    tierMultipliers,
     production,
     speedCost,
     speedMultiplier,
     achievementMultiplier: achievementMult,
     globalMultiplier: globalMult,
+    upgradeMultiplier: upgradeMult,
+    availableUpgrades: available,
+    lockedUpgrades: locked,
+    purchasableUpgrades: purchasable,
     features,
+    boost,
     tick,
     hire: tierId => hireBulk(tierId, 1),
     hireBulk,
     upgradeSpeed,
+    buyUpgrade: purchaseUpgrade,
     recordSearch,
+    bankOffline: bankAway,
+    load,
     reset,
   };
 }
 
+/** Real-time gaps longer than this between ticks (a throttled or suspended tab) are banked as offline boost. */
+export const MAX_TICK_GAP_MS = 1000;
+
 /**
- * Drive the game: tick every TICK_MS. Production is per second of game time,
- * so the interval only sets how smoothly numbers move. Call inside a reactive
- * owner; disposing it stops the loop.
+ * Drive the game: tick every TICK_MS by the real time elapsed. Production is
+ * per second of game time, so the interval only sets how smoothly numbers
+ * move. Browsers throttle timers in hidden tabs, so a long gap is treated as
+ * time away and banked as offline boost. Call inside a reactive owner;
+ * disposing it stops the loop.
  */
 export function startTickLoop(game: GameStore): void {
   onSettled(() => {
-    const id = setInterval(() => game.tick(TICK_MS), TICK_MS);
+    let last = Date.now();
+    const id = setInterval(() => {
+      const now = Date.now();
+      const elapsed = now - last;
+      last = now;
+      if (elapsed <= 0) return;
+      if (elapsed > MAX_TICK_GAP_MS) game.bankOffline(elapsed / 1000);
+      else game.tick(elapsed);
+    }, TICK_MS);
     return () => clearInterval(id);
   });
+}
+
+export interface AutosaveOptions {
+  /** False leaves the existing save untouched (e.g. it's from a newer version) until `save(true)`. */
+  enabled?: boolean;
+  /** Defaults to localStorage. */
+  storage?: Storage | null;
+}
+
+export interface Autosave {
+  /**
+   * Save the committed state now. `force` also turns autosave back on, for
+   * explicit player actions (import, reset) that may overwrite a save we
+   * couldn't load. Returns false if nothing was written.
+   */
+  save(force?: boolean): boolean;
+}
+
+/**
+ * Save every AUTOSAVE_MS, when the tab is hidden and when the page unloads.
+ * Call inside a reactive owner; disposing it stops.
+ */
+export function startAutosave(game: GameStore, options: AutosaveOptions = {}): Autosave {
+  let enabled = options.enabled !== false;
+  const save = (force = false): boolean => {
+    if (force) enabled = true;
+    if (!enabled) return false;
+    // Committed state (as of the last flush): a tick's lag doesn't matter for a save
+    const state = snapshot(game.state) as GameState;
+    return options.storage === undefined ? writeSave(state) : writeSave(state, options.storage);
+  };
+  onSettled(() => {
+    const id = setInterval(() => save(), AUTOSAVE_MS);
+    if (typeof document === 'undefined') return () => clearInterval(id);
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') save();
+    };
+    const onPageHide = () => save();
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  });
+  return { save };
 }

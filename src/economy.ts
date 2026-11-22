@@ -1,5 +1,6 @@
-import { EARNINGS_PER_PAGE, TIERS, getAffordable, getDoublingMultiplier, getSpeedCost, getSpeedMultiplier } from './config.js';
+import { EARNINGS_PER_PAGE, OFFLINE_BOOST_MAX_SECONDS, OFFLINE_BOOST_MULTIPLIER, TIERS, getAffordable, getDoublingMultiplier, getSpeedCost, getSpeedMultiplier } from './config.js';
 import { achievementMultiplier } from './achievements.js';
+import { upgradeGlobalMultiplier, upgradeTierMultiplier } from './upgrades.js';
 import { Decimal } from './bignum.js';
 import type { GameState } from './types.js';
 
@@ -11,22 +12,38 @@ import type { GameState } from './types.js';
  * Production is per second of game time:
  * - writers make pages: writers × writer bonus × global multiplier
  * - every other tier makes workers of the tier directly below it:
- *   count × tier.rate × that tier's doubling bonus
- * - the global multiplier ("Faster" × achievements) applies to pages only,
+ *   count × tier.rate × that tier's multiplier
+ * - a tier's multiplier is its doubling bonus × its upgrades (tier and synergy)
+ * - the global multiplier ("Faster" × achievements × global upgrades) applies to pages only,
  *   so it scales output without compounding down the chain of tiers.
  */
 
 /** Pages added straight to the bigint total once a step is this big (no fractional part worth tracking). */
 const WHOLE_PAGES_FROM = 1e15;
 
-/** A tier's doubling bonus from how many the player has bought. */
+/** A tier's output multiplier: its doubling bonus from how many the player has bought, × its upgrades. */
 export function tierMultiplier(s: GameState, tierId: string): number {
-  return getDoublingMultiplier(s.playerWorkers[tierId] ?? 0);
+  return getDoublingMultiplier(s.playerWorkers[tierId] ?? 0) * upgradeTierMultiplier(s, tierId);
 }
 
-/** Output multiplier from "Faster" and achievements. */
+/** Output multiplier from "Faster", achievements, global upgrades and any offline boost. */
 export function globalMultiplier(s: GameState): Decimal {
-  return getSpeedMultiplier(s.speedLevel).mul(achievementMultiplier(s.achievements.length));
+  const base = getSpeedMultiplier(s.speedLevel)
+    .mul(achievementMultiplier(s.achievements.length))
+    .mul(upgradeGlobalMultiplier(s));
+  return s.boostSeconds > 0 ? base.mul(OFFLINE_BOOST_MULTIPLIER) : base;
+}
+
+/**
+ * Bank time away as offline boost: one boosted second per
+ * OFFLINE_BOOST_MULTIPLIER seconds away, capped at OFFLINE_BOOST_MAX_SECONDS
+ * in total. Mutates `s`; returns the seconds of boost added.
+ */
+export function bankOffline(s: GameState, awaySeconds: number): number {
+  if (!(awaySeconds > 0)) return 0;
+  const before = s.boostSeconds;
+  s.boostSeconds = Math.min(OFFLINE_BOOST_MAX_SECONDS, before + awaySeconds / OFFLINE_BOOST_MULTIPLIER);
+  return Math.max(0, s.boostSeconds - before);
 }
 
 export function pagesPerSecond(s: GameState): Decimal {
@@ -39,10 +56,22 @@ export function productionPerSecond(s: GameState, index: number): Decimal {
   return (s.workers[tier.id] ?? Decimal.ZERO).mul(tier.rate * tierMultiplier(s, tier.id));
 }
 
-/** Run the economy forward by `seconds`. Mutates `s`. */
+/** Run the economy forward by `seconds`, spending offline boost first. Mutates `s`. */
 export function advance(s: GameState, seconds: number): void {
   if (seconds <= 0) return;
+  if (s.boostSeconds > 0) {
+    // Split the step where the boost runs out, so only its boosted part is multiplied
+    const boosted = Math.min(seconds, s.boostSeconds);
+    step(s, boosted);
+    s.boostSeconds = Math.max(0, s.boostSeconds - boosted);
+    seconds -= boosted;
+    if (seconds <= 0) return;
+  }
+  step(s, seconds);
+}
 
+/** One linear step of `seconds` at the current rates. */
+function step(s: GameState, seconds: number): void {
   // Lowest tier first, so each tier grows from the count above it at the start of the step
   for (let i = 1; i < TIERS.length; i++) {
     const made = productionPerSecond(s, i).mul(seconds);

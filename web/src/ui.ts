@@ -1,12 +1,17 @@
 import { createContext, createSignal, type Accessor } from 'solid-js';
-import { MIN_LEVEL, zoomPath, type MapView } from '@game/storageMap';
+import { zoomPath, type MapView } from '@game/storageMap';
+import { formatRoute, parseRoute, type MapState, type Route, type Tab } from './route';
 
-export type Tab = 'workers' | 'library' | 'log';
+export type { MapState, Tab } from './route';
 
 /** Delay between levels when zooming the storage map to a search result. */
 export const ZOOM_STEP_MS = 600;
 
-/** View state shared across panels (not game state, so not saved with the game). */
+/**
+ * View state shared across panels (not game state, so not saved with the
+ * game). It lives in the URL hash (see route.ts): every change writes the URL,
+ * and back/forward or an edited URL updates the view.
+ */
 export interface UiStore {
   readonly tab: Accessor<Tab>;
   setTab(tab: Tab): void;
@@ -28,13 +33,17 @@ export interface UiStore {
   dispose(): void;
 }
 
-export type MapState = { follow: true; level: number } | { follow: false; view: MapView };
+type HistoryMode = 'push' | 'replace';
 
 export function createUiStore(): UiStore {
-  const [tab, setTab] = createSignal<Tab>('workers');
-  // Default: zoomed all the way in, following the newest page
-  const [map, setMap] = createSignal<MapState>({ follow: true, level: MIN_LEVEL });
-  const [mapTarget, setMapTarget] = createSignal<bigint | null>(null);
+  const hasWindow = typeof window !== 'undefined';
+  // Plain mirror of the route. Signal reads lag writes until the flush, so
+  // the URL is built from this rather than from the signals.
+  let route: Route = parseRoute(hasWindow ? window.location.hash : '');
+
+  const [tab, setTabSignal] = createSignal<Tab>(route.tab);
+  const [map, setMap] = createSignal<MapState>(route.map);
+  const [mapTarget, setMapTarget] = createSignal<bigint | null>(route.target);
 
   let timers: ReturnType<typeof setTimeout>[] = [];
   const cancelZoom = () => {
@@ -42,27 +51,67 @@ export function createUiStore(): UiStore {
     timers = [];
   };
 
+  /** Apply `next` to the view; `history` also writes it to the URL. */
+  function apply(next: Partial<Route>, history?: HistoryMode): void {
+    const prev = route;
+    route = { ...route, ...next };
+    if (route.tab !== prev.tab) setTabSignal(route.tab);
+    if (route.map !== prev.map) setMap(route.map);
+    if (route.target !== prev.target) setMapTarget(route.target);
+    if (history && hasWindow) writeUrl(history);
+  }
+
+  function writeUrl(mode: HistoryMode): void {
+    const hash = formatRoute(route);
+    if (hash === formatRoute(parseRoute(window.location.hash))) return;
+    // An empty hash still leaves a bare "#", so drop it from the URL entirely
+    const url = hash || window.location.pathname + window.location.search;
+    if (mode === 'push') window.history.pushState(null, '', url);
+    else window.history.replaceState(null, '', url);
+  }
+
+  // Back/forward and hand-edited URLs
+  const onUrlChange = () => {
+    const next = parseRoute(window.location.hash);
+    if (formatRoute(next) === formatRoute(route)) return;
+    cancelZoom();
+    apply(next);
+  };
+  if (hasWindow) {
+    window.addEventListener('popstate', onUrlChange);
+    window.addEventListener('hashchange', onUrlChange);
+  }
+
   return {
     tab,
-    setTab: t => setTab(t),
+    setTab(t) {
+      if (t !== route.tab) apply({ tab: t }, 'push');
+    },
     map,
     setMapView(view) {
       cancelZoom();
-      setMap({ follow: false, view });
+      apply({ map: { follow: false, view } }, 'push');
     },
     followAt(level) {
       cancelZoom();
-      setMap({ follow: true, level });
+      apply({ map: { follow: true, level } }, 'push');
     },
     mapTarget,
     zoomTo(address, frontier) {
       cancelZoom();
-      setMapTarget(address);
+      // One history entry for the whole zoom: back returns to where it started
+      apply({ target: address }, 'push');
       zoomPath(address, frontier).forEach((view, i) => {
-        timers.push(setTimeout(() => setMap({ follow: false, view }), i * ZOOM_STEP_MS));
+        timers.push(setTimeout(() => apply({ map: { follow: false, view } }, 'replace'), i * ZOOM_STEP_MS));
       });
     },
-    dispose: cancelZoom,
+    dispose() {
+      cancelZoom();
+      if (hasWindow) {
+        window.removeEventListener('popstate', onUrlChange);
+        window.removeEventListener('hashchange', onUrlChange);
+      }
+    },
   };
 }
 

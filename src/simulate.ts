@@ -1,12 +1,14 @@
 import { STORAGE_TIERS, TIERS, createInitialState, getSpeedCost, getWorkerCost } from './config.js';
 import { checkAchievements } from './achievements.js';
 import { advance, buySpeed, buyWorkers } from './economy.js';
+import { availableUpgrades, buyUpgrade } from './upgrades.js';
 import type { Decimal } from './bignum.js';
 import type { GameState } from './types.js';
 
 /**
  * Headless balance simulator: plays the real economy with a simple greedy
- * player who, every step, keeps buying whatever single thing is cheapest
+ * player who, every step, keeps buying whatever single thing (worker,
+ * "Faster" or upgrade) is cheapest
  * until nothing is affordable. Real players are less efficient (and offline
  * sometimes), so treat its times as a lower bound on pacing.
  */
@@ -15,6 +17,8 @@ export interface Milestone {
   /** Minutes of game time when it was reached. */
   minutes: number;
   speedLevel: number;
+  /** Upgrades bought by then. */
+  upgrades: number;
   /** Workers bought per tier at that point. */
   bought: number[];
 }
@@ -46,6 +50,7 @@ export function simulate({ minutes, stepSeconds = 1 }: { minutes: number; stepSe
         filled[tierId] = {
           minutes: s.time / 60,
           speedLevel: s.speedLevel,
+          upgrades: s.upgrades.length,
           bought: TIERS.map(t => s.playerWorkers[t.id] ?? 0),
         };
       }
@@ -68,6 +73,11 @@ function buyGreedily(s: GameState): void {
     const speedCost = getSpeedCost(s.speedLevel);
     if (speedCost.lte(s.money) && (!cheapest || speedCost.lt(cheapest.cost))) {
       cheapest = { cost: speedCost, buy: () => buySpeed(s) };
+    }
+    for (const upgrade of availableUpgrades(s)) {
+      if (upgrade.cost.lte(s.money) && (!cheapest || upgrade.cost.lt(cheapest.cost))) {
+        cheapest = { cost: upgrade.cost, buy: () => buyUpgrade(s, upgrade.id) };
+      }
     }
     if (!cheapest) return;
     cheapest.buy();

@@ -18,7 +18,7 @@ export interface Achievement {
 }
 
 /** Pages that fill one of each storage tier (a drive, a server, ...). */
-const STORAGE_CAPACITY: Record<string, bigint> = (() => {
+export const STORAGE_CAPACITY: Record<string, bigint> = (() => {
   const capacity: Record<string, bigint> = {};
   let pages = 1n;
   for (const tier of STORAGE_TIERS) capacity[tier.id] = pages *= tier.multiplier;
@@ -81,6 +81,14 @@ export const ACHIEVEMENTS: Achievement[] = [
 
   { id: 'speed-1', name: 'Picking Up the Pace', description: 'Buy your first "Faster"', check: s => s.speedLevel >= 1 },
   { id: 'speed-5', name: 'Breakneck', description: 'Reach "Faster" level 5', check: s => s.speedLevel >= 5 },
+
+  {
+    id: 'upgrade-1',
+    name: 'Self-Improvement',
+    description: 'Buy your first upgrade',
+    check: s => s.upgrades.length >= 1,
+  },
+  { id: 'upgrade-10', name: 'Renovations', description: 'Buy 10 upgrades', check: s => s.upgrades.length >= 10 },
 
   { id: 'search-1', name: 'Seeker', description: 'Search the library', check: s => s.searches >= 1 },
   {

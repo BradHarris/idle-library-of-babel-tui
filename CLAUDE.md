@@ -3,6 +3,7 @@
 A browser idle game built with Solid 2.0, Vite 8 and Tailwind v4.
 - Engine (framework-light, in `src/`): `config.ts`, `page.ts`, `lcg.ts`, `format.ts`, `storageScale.ts`, `search.ts`
 - State: `store.ts`
+- Saves: `save.ts` (versioned localStorage format). Before changing `GameState`, read its header comment. Adding a field needs no version bump. Renaming or retyping one needs a migration and a new `src/__fixtures__/save-vN.json`. Never edit an old fixture.
 - UI: `web/src/`, which imports the engine through the `@game/*` alias
 
 ## Commands

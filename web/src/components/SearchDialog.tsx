@@ -1,6 +1,6 @@
 import { Match, Switch, createSignal, useContext } from 'solid-js';
 import { searchLibrary } from '@game/search';
-import { formatPageNumber, formatLocationDisplay } from '@game/format';
+import { formatCount, formatPageNumber, formatLocationDisplay } from '@game/format';
 import type { SearchResult } from '@game/types';
 import { GameContext } from '../game';
 import { UiContext } from '../ui';
@@ -32,8 +32,9 @@ export function SearchDialog() {
 
   const showOnMap = (address: bigint) => {
     const generated = game.state.pagesGenerated;
-    ui.zoomTo(address, generated > 0n ? generated - 1n : 0n);
+    // Tab first, so the zoom is the newest history entry (back undoes it, then the tab)
     ui.setTab('library');
+    ui.zoomTo(address, generated > 0n ? generated - 1n : 0n);
     dialog.close();
     requestAnimationFrame(() =>
       document.getElementById('storage-map')?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
@@ -125,7 +126,7 @@ export function SearchDialog() {
                 <p class="mb-2 italic text-accent">Not yet discovered</p>
                 <dl class="divide-y divide-rule border-y border-rule">
                   <Row label="Target page" value={formatPageNumber(r().address)} />
-                  <Row label="Pages generated" value={formatPageNumber(r().pagesGenerated)} />
+                  <Row label="Pages generated" value={formatCount(r().pagesGenerated)} />
                 </dl>
                 <div class="mt-3">
                   <ShowOnMap onClick={() => showOnMap(r().address)} />

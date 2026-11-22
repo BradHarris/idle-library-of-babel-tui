@@ -1,10 +1,10 @@
 import { describe, it } from 'vitest';
 import { createRoot, flush, snapshot } from 'solid-js';
 import assert from 'node:assert/strict';
-import { planHire, getBulkCost, TIERS, getWorkerCost, getDoublingMultiplier, getDoublingProgress, getDoublingThresholds, getSpeedCost, SPEED_MULTIPLIER } from './config.js';
-import { formatNumber, formatMoney, formatPageNumber, formatPagesPerSecond, wrapText } from './format.js';
+import { planHire, getBulkCost, TIERS, getWorkerCost, getDoublingMultiplier, getDoublingProgress, getDoublingThresholds, getSpeedCost, SPEED_MULTIPLIER, createInitialState, OFFLINE_BOOST_MAX_SECONDS, OFFLINE_BOOST_MULTIPLIER } from './config.js';
+import { formatNumber, formatMoney, formatPageNumber, formatPagesPerSecond, wrapText, formatDuration, formatClock } from './format.js';
 import { generatePage } from './page.js';
-import { createGameStore, type GameStore } from './store.js';
+import { createGameStore, welcomeBack, type GameStore } from './store.js';
 import { D } from './bignum.js';
 
 let game: GameStore;
@@ -518,5 +518,80 @@ describe('planHire', () => {
     assert.strictEqual(planHire('max', writer, 1, getWorkerCost(writer, 1).sub(0.01)).count, 0);
     const cost = getBulkCost(writer, 1, 3);
     assert.deepStrictEqual(planHire('max', writer, 1, cost), { count: 3, cost });
+  });
+});
+
+describe('Game Engine — Offline boost', () => {
+  it('banks one boosted second per 10 seconds away, capped at an hour', () => {
+    resetStore();
+    assert.strictEqual(game.bankOffline(600), 60);
+    assert.strictEqual(get().boostSeconds, 60);
+    // 20 hours away would be 2 hours of boost: capped (including what was already banked)
+    assert.strictEqual(game.bankOffline(20 * 3600), OFFLINE_BOOST_MAX_SECONDS - 60);
+    assert.strictEqual(get().boostSeconds, OFFLINE_BOOST_MAX_SECONDS);
+    assert.strictEqual(game.bankOffline(3600), 0);
+    assert.strictEqual(game.bankOffline(-5), 0);
+  });
+
+  it('logs a welcome back entry, but not for tiny gaps', () => {
+    resetStore();
+    game.bankOffline(5); // 0.5s of boost: not worth a log line
+    assert.strictEqual(get().log.length, 0);
+    game.bankOffline(20 * 3600);
+    const log = get().log;
+    assert.strictEqual(log.length, 1);
+    assert.match(log[0]!.message, /^Welcome back: away 20h, 10× output for 1h$/);
+  });
+
+  it('multiplies page output by 10 while it lasts, then stops', () => {
+    resetStore();
+    const base = get().pps;
+    game.bankOffline(20); // 2s of boost
+    assert.strictEqual(get().pps, base * OFFLINE_BOOST_MULTIPLIER);
+    assert.deepStrictEqual(game.boost(), { active: true, secondsLeft: 2 });
+
+    // A 3s tick crosses the end: 2 boosted seconds (×10) + 1 normal second
+    game.tick(3000);
+    const s = get();
+    assert.strictEqual(s.pagesGenerated, BigInt(2 * 10 + 1));
+    assert.strictEqual(s.boostSeconds, 0);
+    // Writing pages unlocked "First Words" (+2%); the boost itself is gone from the multiplier
+    assert.strictEqual(game.globalMultiplier().toNumber(), game.achievementMultiplier().toNumber());
+    assert.deepStrictEqual(game.boost(), { active: false, secondsLeft: 0 });
+  });
+
+  it('welcomeBack banks boost on a plain state before it goes into a store', () => {
+    const s = createInitialState();
+    assert.strictEqual(welcomeBack(s, 3600), 360);
+    assert.strictEqual(s.boostSeconds, 360);
+    assert.strictEqual(s.log.length, 1);
+  });
+
+  it('load replaces the whole game', () => {
+    resetStore();
+    const next = createInitialState();
+    next.speedLevel = 4;
+    next.pagesGenerated = 99n;
+    game.load(next);
+    const s = get();
+    assert.strictEqual(s.speedLevel, 4);
+    assert.strictEqual(s.pagesGenerated, 99n);
+  });
+});
+
+describe('formatDuration / formatClock', () => {
+  it('formats durations for messages', () => {
+    assert.strictEqual(formatDuration(9), '9s');
+    assert.strictEqual(formatDuration(2537), '42m 17s');
+    assert.strictEqual(formatDuration(60), '1m');
+    assert.strictEqual(formatDuration(72_240), '20h 4m');
+    assert.strictEqual(formatDuration(3600), '1h');
+  });
+
+  it('formats countdowns', () => {
+    assert.strictEqual(formatClock(2537), '42:17');
+    assert.strictEqual(formatClock(5), '0:05');
+    assert.strictEqual(formatClock(3600), '1:00:00');
+    assert.strictEqual(formatClock(0.2), '0:01');
   });
 });

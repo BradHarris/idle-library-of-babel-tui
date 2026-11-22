@@ -65,7 +65,8 @@ function WorkerRow(props: { tier: Tier; below: Tier | undefined; mode: HireMode 
     equals: (a, b) => a.count === b.count && a.cost.eq(b.cost),
   });
   const disabled = createMemo(() => plan().count === 0 || game.state.money.lt(plan().cost));
-  const multiplier = () => game.doublingMultipliers()[props.tier.id] || 1;
+  /** Doubling bonus × upgrades. */
+  const multiplier = () => game.tierMultipliers()[props.tier.id] || 1;
   const progressPct = () => Math.round((game.doublingProgress()[props.tier.id] ?? 0) * 100);
   /** What this tier makes: pages for writers, otherwise workers of the tier below. */
   const output = () =>

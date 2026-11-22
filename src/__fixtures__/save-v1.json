@@ -1,0 +1,34 @@
+{
+  "v": 1,
+  "savedAt": 1795000000000,
+  "state": {
+    "pagesGenerated": "123456789012345678901",
+    "currentPage": "123456789012345678901",
+    "money": [4.56789, 22],
+    "workers": {
+      "writer": [1.25, 3],
+      "manager": [3.5, 1],
+      "overseer": [2, 0],
+      "rector": [0, 0],
+      "cardinal": [0, 0],
+      "pope": [0, 0],
+      "archbishop": [0, 0]
+    },
+    "playerWorkers": { "writer": 40, "manager": 12, "overseer": 2, "rector": 0, "cardinal": 0, "pope": 0, "archbishop": 0 },
+    "log": [
+      { "timestamp": "10:00:00", "message": "Hired Writer for $10.00" },
+      { "timestamp": "10:05:00", "message": "Achievement: First Words" }
+    ],
+    "fractionalPages": 0.25,
+    "speedLevel": 3,
+    "time": 5400.5,
+    "achievements": [
+      { "id": "pages-1", "at": 1 },
+      { "id": "writers-room", "at": 120 },
+      { "id": "hire-manager", "at": 200 }
+    ],
+    "searches": 4,
+    "searchesFound": 1,
+    "boostSeconds": 90
+  }
+}

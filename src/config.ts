@@ -25,6 +25,14 @@ export const TICK_MS = 50;
 export const EARNINGS_PER_PAGE = 1;    // $1.00 per page
 export const PRNG_SEED_BITS = 32;      // 32-bit seed from SHA-256
 export const LOG_MAX_ENTRIES = 10;     // maximum log entries to retain
+/** Real-time interval between autosaves. */
+export const AUTOSAVE_MS = 10_000;
+
+// Offline boost: time away is banked as a page-output boost instead of being simulated.
+// Every OFFLINE_BOOST_MULTIPLIER seconds away banks one boosted second, so a
+// boosted second is worth the time it replaced, up to the cap (1h of boost = 10h away).
+export const OFFLINE_BOOST_MULTIPLIER = 10;
+export const OFFLINE_BOOST_MAX_SECONDS = 3600;
 
 // "Faster": a global output multiplier whose price grows super-exponentially,
 // so each level costs relatively more than the last and it can never pay for itself forever.
@@ -67,6 +75,8 @@ export function createInitialState(): GameState {
     achievements: [],
     searches: 0,
     searchesFound: 0,
+    boostSeconds: 0,
+    upgrades: [],
   };
 }
 
