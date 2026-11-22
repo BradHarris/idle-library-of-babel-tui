@@ -1,14 +1,12 @@
 import { Show, createMemo, useContext } from 'solid-js';
-import { formatPageNumber, formatMoney, formatNumber } from '@game/format';
+import { SPEED_MULTIPLIER } from '@game/config';
+import { formatPageNumber, formatMoney, formatMultiplier, formatPrice, formatRate } from '@game/format';
 import { GameContext } from '../game';
 import { SearchDialog } from './SearchDialog';
 
 export function Hud() {
   const game = useContext(GameContext);
-  const canAfford = createMemo(() => game.state.money >= game.state.tickRateCost);
-  const effectiveTickRate = createMemo(() =>
-    ((1000 / game.tickInterval()) * game.tickSpeedMultiplier()).toFixed(1)
-  );
+  const canAfford = createMemo(() => game.state.money.gte(game.speedCost()));
 
   return (
     <header class="sticky top-0 z-20 border-b border-rule bg-paper/90 backdrop-blur pt-[env(safe-area-inset-top)]">
@@ -21,22 +19,21 @@ export function Hud() {
         <dl class="mt-2 grid grid-cols-3 gap-2 lg:max-w-2xl">
           <Stat label="Pages" stat="pages" value={formatPageNumber(game.state.pagesGenerated)} />
           <Stat label="Money" stat="money" value={formatMoney(game.state.money)} />
-          <Stat label="Pages/s" stat="pps" value={formatNumber(game.pps())} />
+          <Stat label="Pages/s" stat="pps" value={formatRate(game.pps())} />
         </dl>
 
         <div class="mt-2 flex items-center justify-between gap-2 text-xs text-ink-muted">
-          <span class="font-mono tabular-nums">
-            {effectiveTickRate()} ticks/s
-            <Show when={game.tickSpeedMultiplier() > 1}>
-              <span class="ml-1 text-accent">×{game.tickSpeedMultiplier()}</span>
-            </Show>
-            <Show when={game.state.tickRateLevel > 0}>
-              <span class="ml-1">· lv.{formatNumber(game.state.tickRateLevel)}</span>
+          <span data-stat="output" class="font-mono tabular-nums">
+            output {formatMultiplier(game.globalMultiplier())}
+            <Show when={game.state.speedLevel > 0}>
+              <span class="ml-1">· faster lv.{game.state.speedLevel}</span>
             </Show>
           </span>
           <button
-            onClick={() => game.upgradeTickRate()}
+            data-upgrade="speed"
+            onClick={() => game.upgradeSpeed()}
             disabled={!canAfford()}
+            title={`Multiply all page output by ${formatMultiplier(SPEED_MULTIPLIER)}`}
             class={[
               'rounded-full border px-3 py-1 font-medium transition-colors',
               canAfford()
@@ -44,7 +41,7 @@ export function Hud() {
                 : 'cursor-not-allowed border-rule text-ink-muted',
             ]}
           >
-            Faster · <span class="font-mono tabular-nums">{formatMoney(game.state.tickRateCost)}</span>
+            Faster {formatMultiplier(SPEED_MULTIPLIER)} · <span class="font-mono tabular-nums">{formatPrice(game.speedCost())}</span>
           </button>
         </div>
       </div>

@@ -1,81 +1,93 @@
+import { Decimal, type DecimalSource } from './bignum.js';
 import type { LocationTuple } from './types.js';
 
 /**
- * Number formatting utilities for the Library of Babel idle game.
- * Supports raw (0-9999), K/M/B/T suffixes, and scientific notation.
+ * Number formatting. Every number the player sees goes through formatNumber,
+ * so all values read the same way however large they get:
+ * - below 1,000: plain (integers, or a fixed number of decimals for rates)
+ * - 1K up to 999.99T: suffixes with 2 decimals ("1.50K", "12.30M")
+ * - from 1e15 up: scientific with 2 decimals ("1.23e45"), never long digit strings
  */
 
-/**
- * Format a non-negative number with tiered notation.
- * - 0-9,999: raw integer
- * - 10K-999.9T: K/M/B/T with 2 decimal places
- * - above 999.9T: scientific notation
- */
-export function formatNumber(n: number): string {
-  if (n < 0 || !Number.isFinite(n)) return '0';
-  if (n < 1000) {
-    return String(Math.floor(n));
+const SUFFIXES = ['', 'K', 'M', 'B', 'T'];
+
+export interface FormatOptions {
+  /** Decimals shown below 1,000 (default 0: integer counts). */
+  decimals?: number;
+}
+
+export function formatNumber(value: DecimalSource, { decimals = 0 }: FormatOptions = {}): string {
+  const x = Decimal.from(value);
+  if (x.sign() < 0) return '-' + formatNumber(x.neg(), { decimals });
+  if (x.isZero()) return (0).toFixed(decimals);
+
+  if (x.e < 3) {
+    const n = x.toNumber();
+    const shown = decimals === 0 ? String(Math.floor(n)) : n.toFixed(decimals);
+    // 999.996 with 2 decimals rounds to 1000.00: carry into the suffix range instead
+    if (Number(shown) < 1000) return shown;
   }
-  if (n < 1_000_000) {
-    const v = n / 1_000;
-    return v >= 1000 ? n.toExponential(2) : v.toFixed(2) + 'K';
+
+  let group = Math.max(1, Math.floor(x.e / 3));
+  if (group < SUFFIXES.length) {
+    let scaled = x.div(Decimal.fromParts(1, group * 3)).toNumber();
+    if (Number(scaled.toFixed(2)) >= 1000) {
+      group += 1;
+      scaled /= 1000;
+    }
+    if (group < SUFFIXES.length) return scaled.toFixed(2) + SUFFIXES[group];
   }
-  if (n < 1_000_000_000) {
-    const v = n / 1_000_000;
-    return v >= 1000 ? n.toExponential(2) : v.toFixed(2) + 'M';
+
+  // Scientific: 9.995e20 rounds to "10.00": carry into the exponent
+  let mantissa = Number(x.m.toFixed(2));
+  let exponent = x.e;
+  if (mantissa >= 10) {
+    mantissa /= 10;
+    exponent += 1;
   }
-  if (n < 1_000_000_000_000) {
-    const v = n / 1_000_000_000;
-    return v >= 1000 ? n.toExponential(2) : v.toFixed(2) + 'B';
-  }
-  if (n < 1_000_000_000_000_000) {
-    const v = n / 1_000_000_000_000;
-    return v >= 1000 ? n.toExponential(2) : v.toFixed(2) + 'T';
-  }
-  return n.toExponential(2);
+  return `${mantissa.toFixed(2)}e${exponent}`;
+}
+
+/** A whole-number count (workers, items). */
+export function formatCount(value: DecimalSource): string {
+  return formatNumber(value);
+}
+
+/** A rate or amount that can be fractional: always 2 decimals below 1,000 ("1.05", "0.05"). */
+export function formatRate(value: DecimalSource): string {
+  return formatNumber(value, { decimals: 2 });
+}
+
+/** A multiplier, e.g. "×1.05". */
+export function formatMultiplier(value: DecimalSource): string {
+  return '×' + formatRate(value);
+}
+
+/** Money: "$" + a whole-dollar amount. */
+export function formatMoney(value: DecimalSource): string {
+  return '$' + formatNumber(value);
+}
+
+/** A price: like formatMoney, but rounded up so it never reads as cheaper than it is. */
+export function formatPrice(value: DecimalSource): string {
+  return formatMoney(Decimal.from(value).ceil());
 }
 
 /**
- * Format money: prefix with $, apply formatNumber rules.
+ * Format a page number: exact with commas up to 15 digits (999 trillion),
+ * then scientific like every other large number.
  */
-export function formatMoney(n: number): string {
-  return '$' + formatNumber(n);
-}
-
-/**
- * Format a page number with comma-separated thousands.
- * Uses BigInt-compatible string formatting.
- */
-export function formatPageNumber(bigNum: bigint): string {
-  const str = bigNum.toString();
-  // Check if it's large enough to need formatting
-  if (str.length < 4) return str;
-  // Check if it would exceed T suffix range (15+ digits → might need scientific)
-  if (str.length > 15) {
-    // Use scientific notation for very large page numbers
-    const num = Number(bigNum);
-    if (!Number.isFinite(num)) {
-      return str;
-    }
-    return num.toExponential(2);
-  }
-  // Insert commas from the right
-  let result = '';
-  for (let i = str.length - 1, count = 0; i >= 0; i--) {
-    result = str[i] + result;
-    count++;
-    if (count % 3 === 0 && i > 0) {
-      result = ',' + result;
-    }
-  }
-  return result;
+export function formatPageNumber(page: bigint): string {
+  const str = page.toString();
+  if (str.length > 15) return formatNumber(page);
+  return str.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 /**
  * Format pages per second with 2 decimal places.
  */
-export function formatPagesPerSecond(pps: number): string {
-  return pps.toFixed(2);
+export function formatPagesPerSecond(pps: DecimalSource): string {
+  return formatRate(pps);
 }
 
 /**
@@ -106,7 +118,7 @@ export function formatLocationDisplay(location: LocationTuple): string {
     const id = tierIds[i]!;
     const value = location[id];
     if (value !== undefined && (value > 0n || id === 'hardDrive')) {
-      parts.push(`${LOCATION_LABELS[id]} ${value.toString()}`);
+      parts.push(`${LOCATION_LABELS[id]} ${formatPageNumber(value)}`);
     }
   }
   return parts.length > 0 ? parts.join(', ') : 'Drive 0';

@@ -1,6 +1,6 @@
 import { For, Show, createMemo, useContext } from 'solid-js';
 import { computeStorageScale } from '@game/storageScale';
-import { formatNumber } from '@game/format';
+import { formatCount } from '@game/format';
 import { GameContext } from '../game';
 
 export function StorageScalePanel() {
@@ -21,7 +21,7 @@ export function StorageScalePanel() {
           {tier => (
             <li class="flex items-baseline justify-between gap-3 py-2">
               <span>{tier().name}</span>
-              <span class="font-mono tabular-nums">{formatNumber(Number(tier().count))}</span>
+              <span class="font-mono tabular-nums">{formatCount(tier().count)}</span>
             </li>
           )}
         </For>

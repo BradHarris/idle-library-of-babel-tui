@@ -1,33 +1,28 @@
 import { For, Show, createEffect, createMemo, createUniqueId, useContext } from 'solid-js';
-import { formatNumber, formatPageNumber } from '@game/format';
+import { formatPageNumber } from '@game/format';
 import { generatePage } from '@game/page';
 import {
   MIN_LEVEL,
   ancestry,
   bounds,
   cellOf,
-  cellRect,
   childView,
   containerOf,
   firstPage,
   gridFill,
-  gridLayout,
   layoutFor,
   levelName,
   localIndex,
   parentOf,
-  prefixRects,
   sameView,
   type CellRect,
-  type GridLayout,
   type MapView,
 } from '@game/storageMap';
-import type { JSX } from '@solidjs/web';
+import { Dynamic, type JSX } from '@solidjs/web';
 import { GameContext } from '../game';
 import { UiContext } from '../ui';
+import { cellAt, skinFor, stageRect, type CellState } from './mapSkins';
 
-/** Gap between cells, as a fraction of the cell. */
-const GAP = 0.14;
 const ZOOM_MS = 380;
 
 export function StorageMap() {
@@ -54,12 +49,29 @@ export function StorageMap() {
   const fill = createMemo(() => gridFill(view(), game.state.pagesGenerated), {
     equals: (a, b) => a.full === b.full && a.partial === b.partial && a.total === b.total,
   });
+  const skin = createMemo(() => skinFor(view().level));
+  /** Per-container variety for the drawings. */
+  const seed = createMemo(() => Number(view().index % 100_003n));
+  const cellIndices = createMemo(() => Array.from({ length: layout().cells }, (_, i) => i));
+  const fullCells = createMemo(() => fill().full);
+  const filling = createMemo(() => fill().partial > 0 && fill().full < layout().cells);
+  const cellState = (i: number): CellState =>
+    i < fullCells() ? 'full' : i === fullCells() && filling() ? 'partial' : 'empty';
   const frontierCell = createMemo(() => cellOf(view(), frontier()));
   const targetCell = createMemo(() => {
     const target = ui.mapTarget();
     return target === null ? null : cellOf(view(), target);
   });
   const crumbs = createMemo(() => visibleCrumbs(view()));
+  /** The top level (the universe), shown first when the crumbs above were trimmed. */
+  const topCrumb = createMemo(
+    () => {
+      const top = ancestry(view())[0]!;
+      return sameView(top, crumbs()[0]!) ? null : top;
+    },
+    { equals: (a, b) => (a && b ? sameView(a, b) : a === b) }
+  );
+  const goTo = (target: MapView) => (following() ? ui.followAt(target.level) : ui.setMapView(target));
   const filledLabel = createMemo(() => {
     const started = game.state.pagesGenerated > firstPage(view());
     const pct = fill().total * 100;
@@ -70,13 +82,9 @@ export function StorageMap() {
   const cellLabel = createMemo(() => {
     const { level } = view();
     if (level === MIN_LEVEL) return '';
-    const per = layout().perCell;
     const child = levelName(level - 1).toLowerCase();
-    if (per === 1n) {
-      const pages = level - 1 === MIN_LEVEL ? '' : ` (${formatPageNumber(layout().pagesPerCell)} pages)`;
-      return `each cell is one ${child}${pages}`;
-    }
-    return `each cell ≈ ${formatNumber(Number(per))} ${child}s`;
+    const pages = level - 1 === MIN_LEVEL ? '' : ` (${formatPageNumber(layout().pagesPerCell)} pages)`;
+    return `each cell is one ${child}${pages}`;
   });
 
   // Animate between levels: zooming in grows the chosen cell to fill the stage,
@@ -95,13 +103,13 @@ export function StorageMap() {
       if (next.level === prev.level - 1) {
         const cell = cellOf(prev, firstPage(next));
         if (cell !== null) {
-          const r = cellRect(gridLayout(prev.level), cell);
+          const r = stageRect(prev.level, cell);
           from = `translate(${r.x * 100}%, ${r.y * 100}%) scale(${r.w}, ${r.h})`;
         }
       } else if (next.level === prev.level + 1) {
         const cell = cellOf(next, firstPage(prev));
         if (cell !== null) {
-          const r = cellRect(gridLayout(next.level), cell);
+          const r = stageRect(next.level, cell);
           from = `scale(${1 / r.w}, ${1 / r.h}) translate(${-r.x * 100}%, ${-r.y * 100}%)`;
         }
       }
@@ -124,12 +132,8 @@ export function StorageMap() {
     if (isPage()) return;
     const box = stage.getBoundingClientRect();
     if (!box.width || !box.height) return;
-    const l = layout();
-    const col = Math.floor(((e.clientX - box.left) / box.width) * l.cols);
-    let row = Math.floor(((e.clientY - box.top) / box.height) * l.rows);
-    if (l.flipY) row = l.rows - 1 - row;
-    const cell = row * l.cols + col;
-    if (cell >= 0 && cell < l.cells) zoomIntoCell(cell);
+    const cell = cellAt(view().level, layout(), (e.clientX - box.left) / box.width, (e.clientY - box.top) / box.height);
+    if (cell !== null) zoomIntoCell(cell);
   };
 
   const zoomIn = () => zoomIntoCell((following() ? frontierCell() : targetCell() ?? frontierCell()) ?? 0);
@@ -174,6 +178,20 @@ export function StorageMap() {
       </div>
 
       <nav aria-label="Map location" class="mb-2 flex flex-wrap items-baseline gap-x-1 text-sm">
+        <Show when={topCrumb()}>
+          {top => (
+            <>
+              <button
+                data-map-top
+                onClick={() => goTo(top())}
+                class="cursor-pointer text-ink-muted underline decoration-rule underline-offset-2 hover:text-ink"
+              >
+                {crumbLabel(top())}
+              </button>
+              <span class="text-ink-muted">› … ›</span>
+            </>
+          )}
+        </Show>
         <For each={crumbs()} keyed={c => `${c.level}:${c.index}`}>
           {(crumb, i) => (
             <>
@@ -189,7 +207,7 @@ export function StorageMap() {
                 }
               >
                 <button
-                  onClick={() => (following() ? ui.followAt(crumb().level) : ui.setMapView(crumb()))}
+                  onClick={() => goTo(crumb())}
                   class="cursor-pointer text-ink-muted underline decoration-rule underline-offset-2 hover:text-ink"
                 >
                   {crumbLabel(crumb())}
@@ -209,25 +227,39 @@ export function StorageMap() {
           class={['relative aspect-square w-full origin-top-left', { 'cursor-zoom-in': !isPage() }]}
         >
           <Show when={!isPage()} fallback={<PageCell view={view()} pagesGenerated={game.state.pagesGenerated} target={targetCell() !== null} />}>
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="absolute inset-0 size-full">
-            <defs>
-              <CellPattern id={`${id}-empty`} layout={layout()} class="fill-rule/60" />
-              <CellPattern id={`${id}-full`} layout={layout()} class="fill-ink/80" />
-            </defs>
-            <For each={prefixRects(layout(), layout().cells)} keyed={false}>
-              {r => <Rect rect={r()} fill={`url(#${id}-empty)`} />}
+          <svg viewBox="0 0 100 100" class="absolute inset-0 size-full">
+            <Dynamic component={skin().Backdrop} uid={id} seed={seed()} layout={layout()} />
+            <For each={cellIndices()}>
+              {i => {
+                const r = createMemo(() => stageRect(view().level, i));
+                return (
+                  <Dynamic
+                    component={skin().Cell}
+                    x={r().x * 100}
+                    y={r().y * 100}
+                    w={r().w * 100}
+                    h={r().h * 100}
+                    col={i % layout().cols}
+                    row={Math.floor(i / layout().cols)}
+                    index={i}
+                    state={cellState(i)}
+                    seed={seed()}
+                    uid={id}
+                  />
+                );
+              }}
             </For>
-            <For each={prefixRects(layout(), fill().full)} keyed={false}>
-              {r => <Rect rect={r()} fill={`url(#${id}-full)`} />}
-            </For>
-            <Show when={fill().full < layout().cells && fill().partial > 0}>
-              <PartialCell rect={cellRect(layout(), fill().full)} fraction={fill().partial} />
+            <Show when={skin().Overlay}>
+              {overlay => <Dynamic component={overlay()} uid={id} seed={seed()} layout={layout()} />}
+            </Show>
+            <Show when={filling()}>
+              <ProgressBar rect={stageRect(view().level, fullCells())} fraction={fill().partial} />
             </Show>
             <Show when={frontierCell() !== null}>
-              <Marker rect={cellRect(layout(), frontierCell()!)} class="stroke-ink-muted" dashed />
+              <Marker rect={stageRect(view().level, frontierCell()!)} class="stroke-ink-muted" dashed />
             </Show>
             <Show when={targetCell() !== null}>
-              <Marker rect={cellRect(layout(), targetCell()!)} class="animate-pulse stroke-accent" />
+              <Marker rect={stageRect(view().level, targetCell()!)} class="animate-pulse stroke-accent" />
             </Show>
           </svg>
           </Show>
@@ -292,52 +324,17 @@ function PageCell(props: { view: MapView; pagesGenerated: bigint; target: boolea
   );
 }
 
-function CellPattern(props: { id: string; layout: GridLayout; class: string }) {
-  const cw = () => 100 / props.layout.cols;
-  const ch = () => 100 / props.layout.rows;
-  return (
-    <pattern id={props.id} width={cw()} height={ch()} patternUnits="userSpaceOnUse">
-      <rect x={(cw() * GAP) / 2} y={(ch() * GAP) / 2} width={cw() * (1 - GAP)} height={ch() * (1 - GAP)} class={props.class} />
-    </pattern>
-  );
-}
-
-function Rect(props: { rect: CellRect; fill: string }) {
+/** How far the cell being written is: a thin bar along its bottom edge. */
+function ProgressBar(props: { rect: CellRect; fraction: number }) {
+  const h = () => Math.max(0.5, props.rect.h * 100 * 0.1);
   return (
     <rect
       x={props.rect.x * 100}
-      y={props.rect.y * 100}
-      width={props.rect.w * 100}
-      height={props.rect.h * 100}
-      fill={props.fill}
+      y={(props.rect.y + props.rect.h) * 100 - h()}
+      width={Math.max(0.4, props.rect.w * 100 * props.fraction)}
+      height={h()}
+      class="fill-accent"
     />
-  );
-}
-
-/** The cell being filled: a faint cell with a bar showing its progress. */
-function PartialCell(props: { rect: CellRect; fraction: number }) {
-  const cell = () => {
-    const r = props.rect;
-    return { x: r.x * 100, y: r.y * 100, w: r.w * 100, h: r.h * 100 };
-  };
-  const g = () => ({ x: cell().w * GAP, y: cell().h * GAP });
-  return (
-    <>
-      <rect
-        x={cell().x + g().x / 2}
-        y={cell().y + g().y / 2}
-        width={cell().w - g().x}
-        height={cell().h - g().y}
-        class="fill-ink/25"
-      />
-      <rect
-        x={cell().x + g().x / 2}
-        y={cell().y + g().y / 2}
-        width={Math.max(0.3, (cell().w - g().x) * props.fraction)}
-        height={cell().h - g().y}
-        class="fill-ink/80"
-      />
-    </>
   );
 }
 

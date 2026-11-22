@@ -1,17 +1,23 @@
 import { For, Show, createMemo, createSignal, useContext } from 'solid-js';
 import { TIERS, planHire, type HireMode } from '@game/config';
-import { formatNumber, formatMoney } from '@game/format';
+import { ACHIEVEMENTS, FEATURE_UNLOCKS } from '@game/achievements';
+import { Decimal } from '@game/bignum';
+import { formatCount, formatMultiplier, formatPrice, formatRate } from '@game/format';
 import type { Tier } from '@game/types';
 import { GameContext } from '../game';
 
-const MODES: { mode: HireMode; label: string }[] = [
+const MODES: { mode: HireMode; label: string; unlock?: 'hireNext' | 'hireMax' }[] = [
   { mode: 'one', label: '1×' },
-  { mode: 'next', label: 'Next' },
-  { mode: 'max', label: 'Max' },
+  { mode: 'next', label: 'Next', unlock: 'hireNext' },
+  { mode: 'max', label: 'Max', unlock: 'hireMax' },
 ];
 
+const achievementName = (id: string) => ACHIEVEMENTS.find(a => a.id === id)?.name ?? id;
+
 export function WorkersPanel() {
+  const game = useContext(GameContext);
   const [hireMode, setHireMode] = createSignal<HireMode>('one');
+  const locked = (m: (typeof MODES)[number]) => !!m.unlock && !game.features()[m.unlock];
 
   return (
     <div>
@@ -21,11 +27,18 @@ export function WorkersPanel() {
           <For each={MODES}>
             {m => (
               <button
+                data-hire-mode={m.mode}
                 aria-pressed={hireMode() === m.mode ? 'true' : 'false'}
+                disabled={locked(m)}
+                title={locked(m) ? `Unlocked by the "${achievementName(FEATURE_UNLOCKS[m.unlock!])}" achievement` : undefined}
                 onClick={() => setHireMode(m.mode)}
                 class={[
-                  'min-w-12 cursor-pointer rounded-full px-3 py-1 transition-colors',
-                  hireMode() === m.mode ? 'bg-ink text-paper' : 'text-ink-muted hover:text-ink',
+                  'min-w-12 rounded-full px-3 py-1 transition-colors',
+                  locked(m)
+                    ? 'cursor-not-allowed text-rule'
+                    : hireMode() === m.mode
+                      ? 'cursor-pointer bg-ink text-paper'
+                      : 'cursor-pointer text-ink-muted hover:text-ink',
                 ]}
               >
                 {m.label}
@@ -35,23 +48,30 @@ export function WorkersPanel() {
         </div>
       </div>
       <ul class="divide-y divide-rule border-y border-rule">
-        <For each={TIERS}>{tier => <WorkerRow tier={tier} mode={hireMode()} />}</For>
+        <For each={TIERS}>{(tier, i) => <WorkerRow tier={tier} below={TIERS[i() - 1]} mode={hireMode()} />}</For>
       </ul>
     </div>
   );
 }
 
-function WorkerRow(props: { tier: Tier; mode: HireMode }) {
+function WorkerRow(props: { tier: Tier; below: Tier | undefined; mode: HireMode }) {
   const game = useContext(GameContext);
 
   const playerCount = createMemo(() => game.state.playerWorkers[props.tier.id] || 0);
-  const totalCount = createMemo(() => game.state.workers[props.tier.id] || 0);
-  const plan = createMemo(() => planHire(props.mode, props.tier, playerCount(), game.state.money), {
-    equals: (a, b) => a.count === b.count && a.cost === b.cost,
+  const totalCount = createMemo(() => game.state.workers[props.tier.id] ?? Decimal.ZERO, {
+    equals: (a, b) => a.eq(b),
   });
-  const disabled = createMemo(() => plan().count === 0 || game.state.money < plan().cost);
+  const plan = createMemo(() => planHire(props.mode, props.tier, playerCount(), game.state.money), {
+    equals: (a, b) => a.count === b.count && a.cost.eq(b.cost),
+  });
+  const disabled = createMemo(() => plan().count === 0 || game.state.money.lt(plan().cost));
   const multiplier = () => game.doublingMultipliers()[props.tier.id] || 1;
   const progressPct = () => Math.round((game.doublingProgress()[props.tier.id] ?? 0) * 100);
+  /** What this tier makes: pages for writers, otherwise workers of the tier below. */
+  const output = () =>
+    props.below
+      ? `${formatRate(game.production()[props.tier.id] ?? Decimal.ZERO)} ${props.below.name.toLowerCase()}s/s`
+      : `${formatRate(game.pps())} pages/s`;
 
   return (
     <li class="flex items-center gap-3 py-3">
@@ -61,16 +81,23 @@ function WorkerRow(props: { tier: Tier; mode: HireMode }) {
             {props.tier.name}
           </span>
           <Show when={multiplier() > 1}>
-            <span class="font-mono text-xs font-semibold text-accent">×{multiplier()}</span>
+            <span class="font-mono text-xs font-semibold text-accent">{formatMultiplier(multiplier())}</span>
           </Show>
-          <span class="ml-auto font-mono text-sm tabular-nums">{formatNumber(playerCount())}</span>
+          <span data-count class="ml-auto font-mono text-sm tabular-nums">
+            {formatCount(totalCount())}
+          </span>
         </div>
         <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-rule">
           <div class="h-full rounded-full bg-accent/70 transition-all" style={{ width: `${progressPct()}%` }} />
         </div>
-        <Show when={totalCount() > playerCount()}>
-          <p class="mt-1 text-xs text-ink-muted">
-            +<span class="font-mono tabular-nums">{formatNumber(totalCount() - playerCount())}</span> from above
+        <Show when={totalCount().gt(0)}>
+          <p class="mt-1 flex justify-between gap-2 text-xs text-ink-muted">
+            <span>
+              <span class="font-mono tabular-nums">{formatCount(playerCount())}</span> hired
+            </span>
+            <span data-output class="font-mono tabular-nums">
+              {output()}
+            </span>
           </p>
         </Show>
       </div>
@@ -86,7 +113,7 @@ function WorkerRow(props: { tier: Tier; mode: HireMode }) {
         ]}
       >
         <span class="text-xs">{plan().count > 1 ? `×${plan().count}` : 'Hire'}</span>
-        <span class="font-mono text-xs tabular-nums">{formatMoney(plan().cost)}</span>
+        <span class="font-mono text-xs tabular-nums">{formatPrice(plan().cost)}</span>
       </button>
     </li>
   );

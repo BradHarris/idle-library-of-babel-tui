@@ -10,7 +10,9 @@ import {
   bounds,
   childCount,
   layoutFor,
+  levelId,
   levelName,
+  tierLevel,
   ancestry,
   cellOf,
   cellRect,
@@ -21,7 +23,6 @@ import {
   gridLayout,
   localIndex,
   parentOf,
-  prefixRects,
   zoomPath,
 } from './storageMap.js';
 
@@ -37,9 +38,9 @@ describe('container math', () => {
   it('containerOf agrees with locationFromPageOffset at every level', () => {
     const page = queryToPageAddress('the library is unlimited and cyclical');
     const location = locationFromPageOffset(page);
-    STORAGE_TIERS.forEach((tier, level) => {
-      assert.strictEqual(containerOf(page, level).index, location[tier.id]);
-    });
+    for (const tier of STORAGE_TIERS) {
+      assert.strictEqual(containerOf(page, tierLevel(tier.id)).index, location[tier.id], tier.id);
+    }
   });
 
   it('parentOf / localIndex walk up the hierarchy', () => {
@@ -72,9 +73,10 @@ describe('zoomPath', () => {
   });
 
   it('starts from the container shared with the frontier', () => {
-    const target = PAGES_PER[5]! * 3n + 12345n; // city 3
+    const city = tierLevel('city');
+    const target = PAGES_PER[city]! * 3n + 12345n; // city 3
     const path = zoomPath(target, 100n);
-    assert.strictEqual(path[0]!.level, 6); // planet 0 holds both
+    assert.strictEqual(levelName(path[0]!.level), 'Province'); // province 0 holds both
     path.forEach(v => assert.deepStrictEqual(v, containerOf(target, v.level)));
   });
 
@@ -88,18 +90,17 @@ describe('gridLayout', () => {
   it('uses explicit shapes for small containers', () => {
     assert.deepStrictEqual(
       { ...gridLayout(2), pagesPerCell: undefined },
-      { cols: 1, rows: 10, cells: 10, perCell: 1n, flipY: true, pagesPerCell: undefined }
+      { cols: 1, rows: 10, cells: 10, flipY: true, pagesPerCell: undefined }
     );
     assert.strictEqual(gridLayout(4).rows, 100);
     assert.strictEqual(gridLayout(1).cells, 20);
   });
 
-  it('aggregates huge containers into a 32×32 grid', () => {
-    for (const level of [5, 6, 8, 9]) {
+  it('gives every child its own cell at every level', () => {
+    for (let level = MIN_LEVEL + 1; level <= TOP_LEVEL; level++) {
       const layout = gridLayout(level);
-      assert.strictEqual(layout.cols * layout.rows, 1024);
-      assert.ok(layout.cells <= 1024 && layout.cells > 1000);
-      assert.ok(BigInt(layout.cells) * layout.perCell >= STORAGE_TIERS[level]!.multiplier);
+      assert.strictEqual(layout.cells, Number(childCount(level)), levelId(level));
+      assert.ok(layout.cells <= layout.cols * layout.rows && layout.cols * layout.rows <= 1024);
     }
   });
 });
@@ -140,20 +141,41 @@ describe('cells', () => {
   });
 });
 
-describe('prefixRects', () => {
-  it('covers whole rows then the remainder', () => {
-    const floor = gridLayout(3); // 10×10
-    assert.deepStrictEqual(prefixRects(floor, 0), []);
-    const [rows, rest] = prefixRects(floor, 23);
-    assert.deepStrictEqual(rows, { x: 0, y: 0, w: 1, h: 0.2 });
-    assert.strictEqual(rest!.w, 0.3);
-    assert.ok(Math.abs(rest!.y - 0.2) < 1e-9);
+describe('map-only levels', () => {
+  it('splits the big tiers into levels of 1,000', () => {
+    const names = [];
+    for (let level = tierLevel('building') + 1; level <= TOP_LEVEL; level++) names.push(levelName(level));
+    assert.deepStrictEqual(names, [
+      'District',
+      'City',
+      'Province',
+      'Planet',
+      'Solar System',
+      'Star Cluster',
+      'Nebula',
+      'Spiral Arm',
+      'Galaxy',
+      'Galaxy Group',
+      'Galaxy Cluster',
+      'Supercluster',
+      'Universe',
+    ]);
   });
 
-  it('grows upwards for stacked layouts', () => {
-    const [rows] = prefixRects(gridLayout(2), 3); // rack: 1×10, flipped
-    assert.ok(Math.abs(rows!.y - 0.7) < 1e-9);
-    assert.ok(Math.abs(rows!.h - 0.3) < 1e-9);
+  it('keeps each storage tier exactly where the game puts it', () => {
+    let pages = 1n;
+    for (const tier of STORAGE_TIERS) {
+      pages *= tier.multiplier;
+      assert.strictEqual(PAGES_PER[tierLevel(tier.id)], pages, tier.id);
+    }
+    assert.strictEqual(levelId(TOP_LEVEL), 'universe');
+  });
+
+  it('childView picks out the exact child', () => {
+    const galaxy = containerOf(0n, tierLevel('galaxy'));
+    const arm = childView(galaxy, 737)!;
+    assert.strictEqual(levelName(arm.level), 'Spiral Arm');
+    assert.strictEqual(bounds(arm).start, 737n * PAGES_PER[arm.level]!);
   });
 });
 
@@ -168,7 +190,6 @@ describe('below the drive', () => {
     assert.strictEqual(childCount(-3), 118n);
     const drive = gridLayout(0);
     assert.strictEqual(drive.cells, 1024);
-    assert.strictEqual(drive.perCell, 1n);
   });
 
   it('containerOf and bounds agree for pages deep inside later drives', () => {

@@ -1,21 +1,20 @@
-import { createEffect, createMemo, createStore, type Accessor, type Store } from 'solid-js';
+import { createMemo, createStore, onSettled, type Accessor, type Store } from 'solid-js';
 import {
   TIERS,
+  TICK_MS,
+  LOG_MAX_ENTRIES,
   createInitialState,
-  getAffordable,
   getWorkerCost,
-  getTickInterval,
-  getTickSpeedMultiplier,
-  calcPagesPerSecond,
   getDoublingMultiplier,
   getDoublingProgress,
-  TICK_RATE_BASE_COST,
-  LOG_MAX_ENTRIES,
-  LOG_CLEANUP_INTERVAL_TICKS,
-  EARNINGS_PER_PAGE,
+  getSpeedCost,
+  getSpeedMultiplier,
 } from './config.js';
+import { FEATURE_UNLOCKS, achievementMultiplier, checkAchievements, hasAchievement } from './achievements.js';
+import { advance, buySpeed, buyWorkers, globalMultiplier, pagesPerSecond, productionPerSecond } from './economy.js';
+import { Decimal } from './bignum.js';
 import { generatePage } from './page.js';
-import { formatMoney } from './format.js';
+import { formatMoney, formatMultiplier, formatPrice } from './format.js';
 import type { GameState, HireResult } from './types.js';
 
 /**
@@ -36,105 +35,97 @@ export interface GameStore {
   readonly setState: (fn: (draft: GameState) => GameState | void) => void;
 
   // Derived
-  readonly pps: Accessor<number>;
+  readonly pps: Accessor<Decimal>;
   readonly canAfford: Accessor<Record<string, boolean>>;
-  readonly tickInterval: Accessor<number>;
-  readonly tickSpeedMultiplier: Accessor<number>;
   readonly latestPage: Accessor<string>;
   readonly doublingMultipliers: Accessor<Record<string, number>>;
   readonly doublingProgress: Accessor<Record<string, number>>;
+  /** Workers of the tier below that each tier makes per second (0 for writers). */
+  readonly production: Accessor<Record<string, Decimal>>;
+  readonly speedCost: Accessor<Decimal>;
+  readonly speedMultiplier: Accessor<Decimal>;
+  readonly achievementMultiplier: Accessor<Decimal>;
+  /** "Faster" × achievements: multiplies page output. */
+  readonly globalMultiplier: Accessor<Decimal>;
+  /** Features unlocked by achievements. */
+  readonly features: Accessor<{ hireNext: boolean; hireMax: boolean }>;
 
   // Actions
   tick(deltaMs: number): void;
   hire(tierId: string): HireResult;
   hireBulk(tierId: string, count: number): HireResult;
-  upgradeTickRate(): HireResult;
+  upgradeSpeed(): HireResult;
+  /** Note a search (for achievements); `found` if the page was already written. */
+  recordSearch(found: boolean): void;
   reset(): void;
 }
 
+/** Append to the log (oldest first), trimming the oldest. Mutates in place so only changed entries notify. */
 function addLogEntry(state: GameState, message: string): void {
   const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
-  state.log = [{ timestamp, message }, ...state.log].slice(0, LOG_MAX_ENTRIES);
+  state.log.push({ timestamp, message });
+  if (state.log.length > LOG_MAX_ENTRIES) state.log.splice(0, state.log.length - LOG_MAX_ENTRIES);
 }
 
-/**
- * Worker cascade: each tier gains the sum of every tier above it
- * (applies to `workers` only, never `playerWorkers`).
- */
-function computeCascade(workers: Record<string, number>): Record<string, number> {
-  const next: Record<string, number> = {};
-  let cumulativeAbove = 0;
-  for (let i = TIERS.length - 1; i >= 0; i--) {
-    const tierId = TIERS[i]!.id;
-    next[tierId] = (workers[tierId] || 0) + cumulativeAbove;
-    cumulativeAbove += workers[tierId] || 0;
+/** Unlock any achievements that now apply, logging each. */
+function unlockAchievements(state: GameState): void {
+  for (const achievement of checkAchievements(state)) {
+    addLogEntry(state, `Achievement: ${achievement.name}`);
   }
-  return next;
+}
+
+function same(a: unknown, b: unknown): boolean {
+  return a instanceof Decimal && b instanceof Decimal ? a.eq(b) : a === b;
 }
 
 function sameRecord<T>(a: Record<string, T>, b: Record<string, T>): boolean {
   const keys = Object.keys(a);
-  return keys.length === Object.keys(b).length && keys.every(k => a[k] === b[k]);
+  return keys.length === Object.keys(b).length && keys.every(k => same(a[k], b[k]));
 }
 
-function perTier<T>(fn: (tierId: string) => T): Record<string, T> {
+/** Memo options for Decimal results: equal values don't notify. */
+const decimalEquals = { equals: (a: Decimal, b: Decimal) => a.eq(b) };
+
+function perTier<T>(fn: (tierId: string, index: number) => T): Record<string, T> {
   const result: Record<string, T> = {};
-  for (const tier of TIERS) result[tier.id] = fn(tier.id);
+  TIERS.forEach((tier, i) => (result[tier.id] = fn(tier.id, i)));
   return result;
 }
 
 export function createGameStore(): GameStore {
   const [state, setState] = createStore<GameState>(createInitialState());
 
-  const tickInterval = createMemo(() => getTickInterval(state.tickRateLevel));
-  const tickSpeedMultiplier = createMemo(() => getTickSpeedMultiplier(state.tickRateLevel));
-  const pps = createMemo(
-    () =>
-      calcPagesPerSecond(state.workers, getDoublingMultiplier(state.playerWorkers.writer || 0)) *
-      tickSpeedMultiplier()
-  );
+  const speedMultiplier = createMemo(() => getSpeedMultiplier(state.speedLevel), decimalEquals);
+  const speedCost = createMemo(() => getSpeedCost(state.speedLevel), decimalEquals);
+  const achievementMult = createMemo(() => achievementMultiplier(state.achievements.length), decimalEquals);
+  const globalMult = createMemo(() => globalMultiplier(state), decimalEquals);
+  const pps = createMemo(() => pagesPerSecond(state), decimalEquals);
   const canAfford = createMemo(
-    () => perTier(id => state.money >= getWorkerCost(TIERS.find(t => t.id === id)!, state.playerWorkers[id] || 0)),
+    () => perTier(id => state.money.gte(getWorkerCost(TIERS.find(t => t.id === id)!, state.playerWorkers[id] || 0))),
     { equals: sameRecord }
   );
   const latestPage = createMemo(() => generatePage(state.currentPage));
-  const doublingMultipliers = createMemo(() =>
-    perTier(id => getDoublingMultiplier(state.playerWorkers[id] || 0))
-  );
-  const doublingProgress = createMemo(() =>
-    perTier(id => getDoublingProgress(state.playerWorkers[id] || 0))
+  const doublingMultipliers = createMemo(() => perTier(id => getDoublingMultiplier(state.playerWorkers[id] || 0)), {
+    equals: sameRecord,
+  });
+  const doublingProgress = createMemo(() => perTier(id => getDoublingProgress(state.playerWorkers[id] || 0)), {
+    equals: sameRecord,
+  });
+  const production = createMemo(() => perTier((_, i) => (i === 0 ? Decimal.ZERO : productionPerSecond(state, i))), {
+    equals: sameRecord,
+  });
+  const features = createMemo(
+    () => ({
+      hireNext: hasAchievement(state, FEATURE_UNLOCKS.hireNext),
+      hireMax: hasAchievement(state, FEATURE_UNLOCKS.hireMax),
+    }),
+    { equals: (a, b) => a.hireNext === b.hireNext && a.hireMax === b.hireMax }
   );
 
   function tick(deltaMs: number): void {
     setState(s => {
-      const delta = deltaMs / 1000; // seconds
-      s._tickCount++;
-
-      // Pages come from the pre-cascade writer count
-      const writers = s.workers.writer ?? 0;
-      // Assign leaves, not a new object, so only readers of changed tiers re-run
-      const cascaded = computeCascade(s.workers);
-      for (const tier of TIERS) {
-        if (s.workers[tier.id] !== cascaded[tier.id]) s.workers[tier.id] = cascaded[tier.id]!;
-      }
-
-      const pagesPerSec = writers * getDoublingMultiplier(s.playerWorkers.writer || 0);
-      const pagesThisTick = pagesPerSec * delta * getTickSpeedMultiplier(s.tickRateLevel);
-
-      s.money += pagesThisTick * EARNINGS_PER_PAGE;
-
-      // Track fractional pages and cross whole-page boundaries
-      s._fractionalPages += pagesThisTick;
-      const newPages = BigInt(Math.floor(s._fractionalPages));
-      s._fractionalPages -= Number(newPages);
-      if (newPages > 0n) {
-        s.pagesGenerated += newPages;
-        s.currentPage += newPages;
-      }
-
-      if (s._tickCount % LOG_CLEANUP_INTERVAL_TICKS === 0 && s.log.length > 10) {
-        s.log = s.log.slice(0, 10);
-      }
+      advance(s, deltaMs / 1000);
+      unlockAchievements(s);
     });
   }
 
@@ -145,56 +136,45 @@ export function createGameStore(): GameStore {
 
     let result: HireResult = { success: false, message: '' };
     setState(s => {
-      const startCount = s.playerWorkers[tier.id] || 0;
-      const { count: hired, cost } = getAffordable(tier, startCount, s.money, count);
-
-      if (hired === 0) {
-        result = {
-          success: false,
-          message: `Not enough money (need ${formatMoney(getWorkerCost(tier, startCount))})`,
-        };
+      const bought = buyWorkers(s, tier.id, count);
+      if (!bought) {
+        const price = getWorkerCost(tier, s.playerWorkers[tier.id] || 0);
+        result = { success: false, message: `Not enough money (need ${formatPrice(price)})` };
         return;
       }
-
       const message =
-        hired === 1
-          ? `Hired ${tier.name} for ${formatMoney(cost)}`
-          : `Hired ${hired} ${tier.name}s for ${formatMoney(cost)}`;
-
-      s.money -= cost;
-      s.workers[tier.id] = (s.workers[tier.id] || 0) + hired;
-      s.playerWorkers[tier.id] = startCount + hired;
+        bought.hired === 1
+          ? `Hired ${tier.name} for ${formatMoney(bought.cost)}`
+          : `Hired ${bought.hired} ${tier.name}s for ${formatMoney(bought.cost)}`;
       addLogEntry(s, message);
+      unlockAchievements(s);
       result = { success: true, message };
     });
     return result;
   }
 
-  function upgradeTickRate(): HireResult {
+  function upgradeSpeed(): HireResult {
     let result: HireResult = { success: false, message: '' };
     setState(s => {
-      const cost = s.tickRateCost;
-      if (s.money < cost) {
-        result = { success: false, message: `Not enough money (need ${formatMoney(cost)})` };
+      const cost = buySpeed(s);
+      if (cost === null) {
+        result = { success: false, message: `Not enough money (need ${formatPrice(getSpeedCost(s.speedLevel))})` };
         return;
       }
-
-      const newLevel = s.tickRateLevel + 1;
-      const newInterval = getTickInterval(newLevel);
-      const newSpeedMultiplier = getTickSpeedMultiplier(newLevel);
-      const speedDesc =
-        newSpeedMultiplier > 1
-          ? ` (×${newSpeedMultiplier} → effective ${((1000 / newInterval) * newSpeedMultiplier).toFixed(0)}/s)`
-          : '';
-      const message = `Tick rate upgraded to level ${newLevel} (${newInterval}ms interval${speedDesc})`;
-
-      s.money -= cost;
-      s.tickRateLevel = newLevel;
-      s.tickRateCost = TICK_RATE_BASE_COST * Math.pow(2, newLevel);
+      const message = `Faster: level ${s.speedLevel}, output ${formatMultiplier(getSpeedMultiplier(s.speedLevel))}`;
       addLogEntry(s, message);
+      unlockAchievements(s);
       result = { success: true, message };
     });
     return result;
+  }
+
+  function recordSearch(found: boolean): void {
+    setState(s => {
+      s.searches += 1;
+      if (found) s.searchesFound += 1;
+      unlockAchievements(s);
+    });
   }
 
   function reset(): void {
@@ -207,29 +187,32 @@ export function createGameStore(): GameStore {
     setState,
     pps,
     canAfford,
-    tickInterval,
-    tickSpeedMultiplier,
     latestPage,
     doublingMultipliers,
     doublingProgress,
+    production,
+    speedCost,
+    speedMultiplier,
+    achievementMultiplier: achievementMult,
+    globalMultiplier: globalMult,
+    features,
     tick,
     hire: tierId => hireBulk(tierId, 1),
     hireBulk,
-    upgradeTickRate,
+    upgradeSpeed,
+    recordSearch,
     reset,
   };
 }
 
 /**
- * Drive the game: tick every `tickInterval()` ms, restarting the timer when
- * the interval changes. Call inside a reactive owner; disposing it stops the loop.
+ * Drive the game: tick every TICK_MS. Production is per second of game time,
+ * so the interval only sets how smoothly numbers move. Call inside a reactive
+ * owner; disposing it stops the loop.
  */
 export function startTickLoop(game: GameStore): void {
-  createEffect(
-    () => game.tickInterval(),
-    interval => {
-      const id = setInterval(() => game.tick(interval), interval);
-      return () => clearInterval(id);
-    }
-  );
+  onSettled(() => {
+    const id = setInterval(() => game.tick(TICK_MS), TICK_MS);
+    return () => clearInterval(id);
+  });
 }

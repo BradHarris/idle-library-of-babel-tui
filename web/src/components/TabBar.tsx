@@ -4,7 +4,7 @@ import type { Tab } from '../ui';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'workers', label: 'Workers' },
   { id: 'library', label: 'Library' },
-  { id: 'log', label: 'Log' },
+  { id: 'log', label: 'Journal' },
 ];
 
 export function TabBar(props: { value: Tab; onChange: (tab: Tab) => void }) {

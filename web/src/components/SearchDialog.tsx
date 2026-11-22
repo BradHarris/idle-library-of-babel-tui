@@ -19,7 +19,9 @@ export function SearchDialog() {
 
   const search = () => {
     const found = searchLibrary(input.value, game.state.pagesGenerated);
-    if (found) setResult(found);
+    if (!found) return;
+    setResult(found);
+    game.recordSearch(found.type === 'found');
   };
 
   // Fires for the Close button and for Escape, so state resets either way

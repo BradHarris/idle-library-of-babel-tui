@@ -4,13 +4,14 @@ import { GameContext } from '../game';
 
 export function LogPanel() {
   const game = useContext(GameContext);
+  const newestFirst = () => game.state.log.slice(-LOG_MAX_ENTRIES).reverse();
 
   return (
     <div>
       <h2 class="section-title mb-2">Log</h2>
       <ul class="divide-y divide-rule border-y border-rule text-sm lg:max-h-64 lg:overflow-y-auto">
         <For
-          each={game.state.log.slice(0, LOG_MAX_ENTRIES)}
+          each={newestFirst()}
           fallback={<li class="py-2 text-ink-muted italic">Starting up…</li>}
         >
           {entry => (

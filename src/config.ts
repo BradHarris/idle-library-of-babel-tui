@@ -1,74 +1,95 @@
+import { D, Decimal, type DecimalSource } from './bignum.js';
 import type { Tier, StorageTier, GameState } from './types.js';
 
 /**
- * Worker tier definitions for the Library of Babel idle game.
- * Each tick, higher-tier workers spawn workers of the tier below them (cascade).
- * Price scaling for manual purchases: baseCost × 1.5^count
+ * Worker tiers. Writers make pages; every other tier makes workers of the tier
+ * directly below it, `rate` per worker per second. Prices grow by `costGrowth`
+ * per purchase, faster for higher tiers.
+ *
+ * Tuned with the simulator in src/simulate.ts (see src/balance.test.ts): a
+ * player buying greedily fills the first drive in ~25 min and the first
+ * building in ~1.5 h, then slows down — the point where prestige will come in.
  */
 export const TIERS: Tier[] = [
-  { id: 'writer',       name: 'Writer',      baseCost: 10             },
-  { id: 'manager',      name: 'Manager',     baseCost: 500            },
-  { id: 'overseer',     name: 'Overseer',    baseCost: 5_000          },
-  { id: 'rector',       name: 'Rector',      baseCost: 50_000         },
-  { id: 'cardinal',     name: 'Cardinal',    baseCost: 500_000        },
-  { id: 'pope',         name: 'Pope',        baseCost: 10_000_000     },
-  { id: 'archbishop',   name: 'Archbishop',  baseCost: 100_000_000    },
+  { id: 'writer',     name: 'Writer',     baseCost: 10,          costGrowth: 1.15, rate: 0 },
+  { id: 'manager',    name: 'Manager',    baseCost: 80,          costGrowth: 1.2,  rate: 0.05 },
+  { id: 'overseer',   name: 'Overseer',   baseCost: 640,         costGrowth: 1.25, rate: 0.03 },
+  { id: 'rector',     name: 'Rector',     baseCost: 5_120,       costGrowth: 1.3,  rate: 0.02 },
+  { id: 'cardinal',   name: 'Cardinal',   baseCost: 40_960,      costGrowth: 1.35, rate: 0.015 },
+  { id: 'pope',       name: 'Pope',       baseCost: 327_680,     costGrowth: 1.4,  rate: 0.01 },
+  { id: 'archbishop', name: 'Archbishop', baseCost: 2_621_440,   costGrowth: 1.45, rate: 0.008 },
 ];
 
-export const TICK_INTERVAL = 1000;     // ms — base tick interval (1/sec)
+/** Real-time interval between ticks. Production is per second, so this only sets how smoothly numbers move. */
+export const TICK_MS = 50;
 export const EARNINGS_PER_PAGE = 1;    // $1.00 per page
 export const PRNG_SEED_BITS = 32;      // 32-bit seed from SHA-256
 export const LOG_MAX_ENTRIES = 10;     // maximum log entries to retain
-export const LOG_CLEANUP_INTERVAL_TICKS = 500; // every 25s
 
-// Tick rate upgrade constants
-export const TICK_RATE_BASE_COST = 100000;   // $100K initial upgrade cost
-export const TICK_RATE_MIN_INTERVAL = 33;    // ms minimum (30 ticks/sec max)
-export const TICK_RATE_IMPROVEMENT_MS = 50;  // ms reduction per purchase
-export const TICK_RATE_CAP_LEVEL = 19;       // last level with real interval > 33ms
+// "Faster": a global output multiplier whose price grows super-exponentially,
+// so each level costs relatively more than the last and it can never pay for itself forever.
+export const SPEED_MULTIPLIER = 1.5;   // output × this per level
+export const SPEED_BASE_COST = 10_000;
+export const SPEED_COST_GROWTH = 10;   // price × this per level...
+export const SPEED_COST_ACCEL = 2.5;   // ...and × this^(level²)
+
+/** Price of the next "Faster" level when `level` levels are owned. */
+export function getSpeedCost(level: number): Decimal {
+  return D(SPEED_BASE_COST).mul(D(SPEED_COST_GROWTH).pow(level)).mul(D(SPEED_COST_ACCEL).pow(level * level));
+}
+
+/** Output multiplier from `level` levels of "Faster". */
+export function getSpeedMultiplier(level: number): Decimal {
+  return D(SPEED_MULTIPLIER).pow(level);
+}
 
 /**
  * Create the initial game state.
  * Starts with 1 Writer, $0 money, 0 pages.
  */
 export function createInitialState(): GameState {
-  const workers: Record<string, number> = {};
+  const workers: Record<string, Decimal> = {};
   const playerWorkers: Record<string, number> = {};
   for (const tier of TIERS) {
-    workers[tier.id] = tier.id === 'writer' ? 1 : 0;
+    workers[tier.id] = tier.id === 'writer' ? Decimal.ONE : Decimal.ZERO;
     playerWorkers[tier.id] = tier.id === 'writer' ? 1 : 0;
   }
   return {
     pagesGenerated: 0n,
     currentPage: 0n,
-    money: 0,
+    money: Decimal.ZERO,
     workers,
     playerWorkers,
     log: [],
-    _tickCount: 0,
     _fractionalPages: 0, // track fractional pages for boundary crossing
-    tickRateLevel: 0,
-    tickRateCost: TICK_RATE_BASE_COST,
+    speedLevel: 0,
+    time: 0,
+    achievements: [],
+    searches: 0,
+    searchesFound: 0,
   };
 }
 
 /**
  * Calculate the current cost to purchase one worker of a given tier.
- * Cost = baseCost × 1.5^playerBoughtCount
+ * Cost = baseCost × costGrowth^playerBoughtCount
  */
-export function getWorkerCost(tier: Tier, playerBoughtCount: number): number {
-  return tier.baseCost * Math.pow(1.5, playerBoughtCount);
+export function getWorkerCost(tier: Tier, playerBoughtCount: number): Decimal {
+  return D(tier.baseCost).mul(D(tier.costGrowth).pow(playerBoughtCount));
 }
 
+/** Each threshold is this many times the last. */
+export const DOUBLING_THRESHOLD_FACTOR = 4;
+
 /**
- * Generate the doubling milestone thresholds: [10, 20, 40, 80, 160, ...].
- * threshold(n) = 10 × 2^n for n >= 0.
- * Returns thresholds up to a practical limit (max 64 milestones).
+ * Doubling milestones: owning this many of a tier doubles its output.
+ * threshold(n) = 10 × 4^n → [10, 40, 160, 640, ...]. Spacing them out keeps
+ * the bonus from compounding down the chain of tiers too fast.
  */
 export function getDoublingThresholds(): number[] {
   const thresholds: number[] = [];
-  for (let i = 0; i < 64; i++) {
-    thresholds.push(10 * (1 << i));
+  for (let i = 0; i < 24; i++) {
+    thresholds.push(10 * DOUBLING_THRESHOLD_FACTOR ** i);
   }
   return thresholds;
 }
@@ -87,12 +108,11 @@ export function getDoublingMultiplier(playerBoughtCount: number): number {
       break;
     }
   }
-  return 1 << milestones; // 2^milestones
+  return 2 ** milestones;
 }
 
 /**
  * Calculate progress (0-1) toward the next doubling milestone.
- * Returns 0 if at or past a milestone (resetting toward next).
  */
 export function getDoublingProgress(playerBoughtCount: number): number {
   const thresholds = getDoublingThresholds();
@@ -102,38 +122,12 @@ export function getDoublingProgress(playerBoughtCount: number): number {
     if (playerBoughtCount >= thresholds[i]!) {
       previousThreshold = thresholds[i]!;
     } else {
-      // thresholds[i] is the next unreached threshold
       const nextThreshold = thresholds[i]!;
       const gap = nextThreshold - previousThreshold;
       return gap > 0 ? (playerBoughtCount - previousThreshold) / gap : 0;
     }
   }
-  // Beyond all thresholds — progress is 0
   return 0;
-}
-
-/**
- * Calculate the current tick interval based on tick rate level.
- */
-export function getTickInterval(tickRateLevel: number): number {
-  return Math.max(TICK_RATE_MIN_INTERVAL, Math.round(TICK_INTERVAL - tickRateLevel * TICK_RATE_IMPROVEMENT_MS));
-}
-
-/**
- * Calculate the speed multiplier past the real-interval cap.
- * Once the tick interval hits the 33ms floor (level ≥ 20), each additional
- * upgrade doubles effective output via a multiplier rather than a faster interval.
- */
-export function getTickSpeedMultiplier(tickRateLevel: number): number {
-  if (tickRateLevel <= TICK_RATE_CAP_LEVEL) return 1;
-  return Math.pow(2, tickRateLevel - TICK_RATE_CAP_LEVEL);
-}
-
-/**
- * Calculate pages per second: writer workers produce pages, multiplied by their doubling multiplier.
- */
-export function calcPagesPerSecond(workers: Record<string, number>, multiplier = 1): number {
-  return (workers.writer ?? 0) * multiplier;
 }
 
 /**
@@ -168,34 +162,36 @@ export const STORAGE_TIERS: StorageTier[] = [
 // ─── Hiring ───────────────────────────────────────────────
 
 /**
- * Total cost to hire `count` workers starting from `playerBoughtCount`.
+ * Total cost to hire `count` workers starting from `playerBoughtCount`:
+ * a geometric series, price × (g^count − 1) / (g − 1).
  */
-export function getBulkCost(tier: Tier, playerBoughtCount: number, count: number): number {
-  let total = 0;
-  for (let i = 0; i < count; i++) {
-    total += getWorkerCost(tier, playerBoughtCount + i);
-  }
-  return total;
+export function getBulkCost(tier: Tier, playerBoughtCount: number, count: number): Decimal {
+  if (count <= 0) return Decimal.ZERO;
+  const g = tier.costGrowth;
+  return getWorkerCost(tier, playerBoughtCount).mul(D(g).pow(count).sub(1)).div(g - 1);
 }
 
 /**
  * How many workers (up to `limit`) can be bought with `money`, and what they cost.
+ * Solves the geometric series for the count instead of looping, so it stays
+ * cheap however much money there is.
  */
 export function getAffordable(
   tier: Tier,
   playerBoughtCount: number,
-  money: number,
+  money: DecimalSource,
   limit = Infinity
-): { count: number; cost: number } {
-  let count = 0;
-  let cost = 0;
-  while (count < limit) {
-    const next = getWorkerCost(tier, playerBoughtCount + count);
-    if (cost + next > money) break;
-    cost += next;
-    count++;
-  }
-  return { count, cost };
+): { count: number; cost: Decimal } {
+  const budget = D(money);
+  const first = getWorkerCost(tier, playerBoughtCount);
+  if (budget.lt(first) || limit < 1) return { count: 0, cost: Decimal.ZERO };
+  const g = tier.costGrowth;
+  // count = floor(log_g(budget × (g − 1) / first + 1)), corrected for float error
+  const ratio = budget.mul(g - 1).div(first).add(1);
+  let count = Math.min(limit, Math.max(1, Math.floor(ratio.log10() / Math.log10(g))));
+  while (count > 0 && getBulkCost(tier, playerBoughtCount, count).gt(budget)) count--;
+  while (count < limit && getBulkCost(tier, playerBoughtCount, count + 1).lte(budget)) count++;
+  return { count, cost: getBulkCost(tier, playerBoughtCount, count) };
 }
 
 export type HireMode = 'one' | 'next' | 'max';
@@ -210,8 +206,8 @@ export function planHire(
   mode: HireMode,
   tier: Tier,
   playerBoughtCount: number,
-  money: number
-): { count: number; cost: number } {
+  money: DecimalSource
+): { count: number; cost: Decimal } {
   if (mode === 'next') {
     const threshold = getDoublingThresholds().find(t => t > playerBoughtCount);
     const count = threshold ? threshold - playerBoughtCount : 1;

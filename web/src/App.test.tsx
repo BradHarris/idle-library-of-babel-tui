@@ -4,6 +4,7 @@ import { render } from '@solidjs/web';
 import { captureArtifact } from '@solidjs/diagnostics';
 import '@solidjs/diagnostics/vitest';
 import { generatePage, queryToPageAddress } from '@game/page';
+import { ACHIEVEMENTS } from '@game/achievements';
 import { formatPageNumber } from '@game/format';
 import { containerOf, levelName, localIndex, zoomPath } from '@game/storageMap';
 import { App } from './App';
@@ -47,7 +48,7 @@ describe('App', () => {
       () => {
         root = mount();
         flush();
-        // 1 writer → 1 page/sec; 15 ticks earn $15, the cost of a second writer
+        // 1 writer → 1 page/sec; 15 seconds earn ~$15, enough for a second writer ($11.50)
         vi.advanceTimersByTime(15_000);
         flush();
         root.querySelector<HTMLButtonElement>('button[data-tier="writer"]')!.click();
@@ -58,7 +59,8 @@ describe('App', () => {
     expect(artifact).toHaveNoDiagnostics();
     expect(stat(root, 'pages')).toBe('15');
     expect(root.textContent).toContain('Hired Writer for');
-    expect(stat(root, 'pps')).toBe('2');
+    // 2 writers, ×1.02 from the "First Words" achievement
+    expect(stat(root, 'pps')).toBe('2.04');
     // The map follows the newest page (page 14 of 0..14) and shows its text
     expect(root.querySelector('[data-map-title]')!.textContent).toBe('Page 14');
     expect(root.querySelector('[data-map-page]')!.textContent).toContain(generatePage(14n).slice(0, 40));
@@ -156,9 +158,49 @@ describe('App', () => {
     expect(follow()).toBe('true');
 
     // A breadcrumb jumps up a level and keeps following
-    root.querySelector<HTMLButtonElement>('nav[aria-label="Map location"] button')!.click();
+    root.querySelector<HTMLButtonElement>('nav[aria-label="Map location"] button:not([data-map-top])')!.click();
     flush();
     expect(title()).toBe('Volume 0');
     expect(follow()).toBe('true');
+
+    // The first crumb is always the universe: one tap to the top
+    root.querySelector<HTMLButtonElement>('[data-map-top]')!.click();
+    flush();
+    expect(title()).toBe('Universe 0');
+    expect(follow()).toBe('true');
+    expect(root.querySelector('[data-map-top]')).toBeNull();
+    expect(button('Zoom out').disabled).toBe(true);
+  });
+
+  it('pops up achievements, lists them, and unlocks hire modes', () => {
+    vi.useFakeTimers();
+    const root = mount();
+    flush();
+    const mode = (m: string) => root.querySelector<HTMLButtonElement>(`[data-hire-mode="${m}"]`)!;
+    const unlocked = (id: string) => root.querySelector(`[data-achievement="${id}"]`)!.getAttribute('data-unlocked');
+
+    expect(mode('next').disabled).toBe(true);
+    expect(mode('max').disabled).toBe(true);
+    expect(unlocked('pages-1')).toBe('false');
+
+    vi.advanceTimersByTime(1_000);
+    flush();
+    expect(unlocked('pages-1')).toBe('true');
+    expect(root.querySelector('[data-achievement-toast="pages-1"]')).not.toBeNull();
+    expect(root.querySelector('[data-achievement-count]')!.textContent).toBe(`1/${ACHIEVEMENTS.length}`);
+
+    // The toast goes after a few seconds of play
+    vi.advanceTimersByTime(5_000);
+    flush();
+    expect(root.querySelector('[data-achievement-toast="pages-1"]')).toBeNull();
+
+    // Hiring a manager ($80, ~80s of one writer) unlocks "Max"
+    vi.advanceTimersByTime(75_000);
+    flush();
+    root.querySelector<HTMLButtonElement>('button[data-tier="manager"]')!.click();
+    flush();
+    expect(unlocked('hire-manager')).toBe('true');
+    expect(mode('max').disabled).toBe(false);
+    expect(mode('next').disabled).toBe(true);
   });
 });
