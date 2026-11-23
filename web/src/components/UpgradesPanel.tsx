@@ -1,6 +1,5 @@
 import { For, Show, useContext } from 'solid-js';
 import { UPGRADES, requirementProgress, requirementText, type Upgrade } from '@game/upgrades';
-import { SPEED_MULTIPLIER } from '@game/config';
 import type { Decimal } from '@game/bignum';
 import { formatMultiplier, formatPrice } from '@game/format';
 import { GameContext } from '../game';
@@ -27,8 +26,8 @@ export function UpgradesPanel() {
         {/* "Faster" can be bought again and again, so it's always here */}
         <BuyCard
           id="speed"
-          name={game.state.speedLevel > 0 ? `Faster (level ${game.state.speedLevel})` : 'Faster'}
-          description={`All page output ${formatMultiplier(SPEED_MULTIPLIER)} per level`}
+          name={`Faster (level ${game.state.speedLevel + 1})`}
+          description={`All page output ${formatMultiplier(game.speedFactor())} per level`}
           cost={game.speedCost()}
           onBuy={() => game.upgradeSpeed()}
         />

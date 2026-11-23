@@ -98,6 +98,21 @@ export const ACHIEVEMENTS: Achievement[] = [
     check: s => s.searchesFound >= 1,
   },
 
+  {
+    id: 'solve-1',
+    name: 'Anagrammatist',
+    description: 'Unscramble a word found in the library',
+    check: s => s.puzzlesSolved.length >= 1,
+  },
+  { id: 'solve-10', name: 'Lexicographer', description: 'Unscramble 10 words', check: s => s.puzzlesSolved.length >= 10 },
+  {
+    id: 'solve-long',
+    name: 'Sesquipedalian',
+    description: 'Unscramble a word of 10 letters or more',
+    // Puzzle ids are their answers
+    check: s => s.puzzlesSolved.some(id => id.length >= 10),
+  },
+
   ...STORAGE_ACHIEVEMENTS.map(
     ([tierId, name, what]): Achievement => ({
       id: `fill-${tierId}`,
@@ -119,8 +134,8 @@ export function hasAchievement(s: GameState, id: string): boolean {
 }
 
 /** Output multiplier from `count` unlocked achievements. */
-export function achievementMultiplier(count: number): Decimal {
-  return D(ACHIEVEMENT_BONUS).pow(count);
+export function achievementMultiplier(count: number, bonus: number = ACHIEVEMENT_BONUS): Decimal {
+  return D(bonus).pow(count);
 }
 
 /**

@@ -12,6 +12,18 @@
   --color-water: #8fa9ad;
 
   --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, ui-serif, serif;
+
+  /* A text caret's blink, under the puzzle tile where the next typed letter goes */
+  --animate-caret: caret 1.06s step-end infinite;
+  @keyframes caret {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
 }
 
 @layer base {

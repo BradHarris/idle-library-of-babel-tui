@@ -1,0 +1,1648 @@
+{
+  "generatedBy": "verification/save-lifecycle/check.mjs (TLC 1.7.4)",
+  "states": {
+    "s0": {
+      "slot": "empty",
+      "clobbered": false,
+      "foreign": false,
+      "backup": "none",
+      "overwrote": false,
+      "open": false,
+      "loaded": "none",
+      "halted": false,
+      "enabled": false
+    },
+    "s1": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": false,
+      "backup": "none",
+      "overwrote": false,
+      "open": false,
+      "loaded": "none",
+      "halted": false,
+      "enabled": false
+    },
+    "s2": {
+      "slot": "unreadable",
+      "clobbered": false,
+      "foreign": false,
+      "backup": "none",
+      "overwrote": false,
+      "open": false,
+      "loaded": "none",
+      "halted": false,
+      "enabled": false
+    },
+    "s3": {
+      "slot": "empty",
+      "clobbered": false,
+      "foreign": false,
+      "backup": "none",
+      "overwrote": false,
+      "open": true,
+      "loaded": "empty",
+      "halted": false,
+      "enabled": true
+    },
+    "s4": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": false,
+      "backup": "none",
+      "overwrote": false,
+      "open": true,
+      "loaded": "empty",
+      "halted": false,
+      "enabled": true
+    },
+    "s5": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": false,
+      "backup": "none",
+      "overwrote": false,
+      "open": true,
+      "loaded": "ok",
+      "halted": false,
+      "enabled": true
+    },
+    "s6": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "none",
+      "overwrote": false,
+      "open": true,
+      "loaded": "empty",
+      "halted": false,
+      "enabled": true
+    },
+    "s7": {
+      "slot": "unreadable",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "none",
+      "overwrote": false,
+      "open": true,
+      "loaded": "empty",
+      "halted": false,
+      "enabled": true
+    },
+    "s8": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "none",
+      "overwrote": false,
+      "open": true,
+      "loaded": "ok",
+      "halted": false,
+      "enabled": true
+    },
+    "s9": {
+      "slot": "unreadable",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "none",
+      "overwrote": false,
+      "open": true,
+      "loaded": "ok",
+      "halted": false,
+      "enabled": true
+    },
+    "s10": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "none",
+      "overwrote": false,
+      "open": true,
+      "loaded": "empty",
+      "halted": true,
+      "enabled": true
+    },
+    "s11": {
+      "slot": "unreadable",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "none",
+      "overwrote": false,
+      "open": true,
+      "loaded": "empty",
+      "halted": true,
+      "enabled": true
+    },
+    "s12": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "none",
+      "overwrote": false,
+      "open": true,
+      "loaded": "ok",
+      "halted": true,
+      "enabled": true
+    },
+    "s13": {
+      "slot": "unreadable",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "none",
+      "overwrote": false,
+      "open": true,
+      "loaded": "ok",
+      "halted": true,
+      "enabled": true
+    },
+    "s14": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": false,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": false,
+      "loaded": "none",
+      "halted": false,
+      "enabled": false
+    },
+    "s15": {
+      "slot": "unreadable",
+      "clobbered": false,
+      "foreign": false,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": false,
+      "loaded": "none",
+      "halted": false,
+      "enabled": false
+    },
+    "s16": {
+      "slot": "unreadable",
+      "clobbered": false,
+      "foreign": false,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "unreadable",
+      "halted": false,
+      "enabled": false
+    },
+    "s17": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "unreadable",
+      "halted": false,
+      "enabled": false
+    },
+    "s18": {
+      "slot": "unreadable",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "unreadable",
+      "halted": false,
+      "enabled": false
+    },
+    "s19": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "unreadable",
+      "halted": true,
+      "enabled": false
+    },
+    "s20": {
+      "slot": "unreadable",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "unreadable",
+      "halted": true,
+      "enabled": false
+    },
+    "s21": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": false,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "ok",
+      "halted": false,
+      "enabled": true
+    },
+    "s22": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": false,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "unreadable",
+      "halted": false,
+      "enabled": true
+    },
+    "s23": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "ok",
+      "halted": false,
+      "enabled": true
+    },
+    "s24": {
+      "slot": "unreadable",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "ok",
+      "halted": false,
+      "enabled": true
+    },
+    "s25": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "unreadable",
+      "halted": false,
+      "enabled": true
+    },
+    "s26": {
+      "slot": "unreadable",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "unreadable",
+      "halted": false,
+      "enabled": true
+    },
+    "s27": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "ok",
+      "halted": true,
+      "enabled": true
+    },
+    "s28": {
+      "slot": "unreadable",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "ok",
+      "halted": true,
+      "enabled": true
+    },
+    "s29": {
+      "slot": "game",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "unreadable",
+      "halted": true,
+      "enabled": true
+    },
+    "s30": {
+      "slot": "unreadable",
+      "clobbered": false,
+      "foreign": true,
+      "backup": "unreadable",
+      "overwrote": false,
+      "open": true,
+      "loaded": "unreadable",
+      "halted": true,
+      "enabled": true
+    }
+  },
+  "init": [
+    "s0",
+    "s1",
+    "s2"
+  ],
+  "edges": [
+    {
+      "from": "s0",
+      "action": "Open",
+      "to": "s3"
+    },
+    {
+      "from": "s0",
+      "action": "OtherTabSaves",
+      "to": "s1"
+    },
+    {
+      "from": "s0",
+      "action": "OtherTabWritesNewer",
+      "to": "s2"
+    },
+    {
+      "from": "s1",
+      "action": "Open",
+      "to": "s5"
+    },
+    {
+      "from": "s1",
+      "action": "OtherTabSaves",
+      "to": "s1"
+    },
+    {
+      "from": "s1",
+      "action": "OtherTabWritesNewer",
+      "to": "s2"
+    },
+    {
+      "from": "s10",
+      "action": "Autosave",
+      "to": "s10"
+    },
+    {
+      "from": "s10",
+      "action": "Crash",
+      "to": "s1"
+    },
+    {
+      "from": "s10",
+      "action": "Import",
+      "to": "s10"
+    },
+    {
+      "from": "s10",
+      "action": "OtherTabSaves",
+      "to": "s10"
+    },
+    {
+      "from": "s10",
+      "action": "OtherTabWritesNewer",
+      "to": "s11"
+    },
+    {
+      "from": "s10",
+      "action": "PageClose",
+      "to": "s1"
+    },
+    {
+      "from": "s10",
+      "action": "Reset",
+      "to": "s10"
+    },
+    {
+      "from": "s10",
+      "action": "SaveNow",
+      "to": "s10"
+    },
+    {
+      "from": "s10",
+      "action": "TabHidden",
+      "to": "s10"
+    },
+    {
+      "from": "s11",
+      "action": "Autosave",
+      "to": "s11"
+    },
+    {
+      "from": "s11",
+      "action": "Crash",
+      "to": "s2"
+    },
+    {
+      "from": "s11",
+      "action": "Import",
+      "to": "s11"
+    },
+    {
+      "from": "s11",
+      "action": "OtherTabSaves",
+      "to": "s10"
+    },
+    {
+      "from": "s11",
+      "action": "OtherTabWritesNewer",
+      "to": "s11"
+    },
+    {
+      "from": "s11",
+      "action": "PageClose",
+      "to": "s2"
+    },
+    {
+      "from": "s11",
+      "action": "Reset",
+      "to": "s11"
+    },
+    {
+      "from": "s11",
+      "action": "SaveNow",
+      "to": "s11"
+    },
+    {
+      "from": "s11",
+      "action": "TabHidden",
+      "to": "s11"
+    },
+    {
+      "from": "s12",
+      "action": "Autosave",
+      "to": "s12"
+    },
+    {
+      "from": "s12",
+      "action": "Crash",
+      "to": "s1"
+    },
+    {
+      "from": "s12",
+      "action": "Import",
+      "to": "s12"
+    },
+    {
+      "from": "s12",
+      "action": "OtherTabSaves",
+      "to": "s12"
+    },
+    {
+      "from": "s12",
+      "action": "OtherTabWritesNewer",
+      "to": "s13"
+    },
+    {
+      "from": "s12",
+      "action": "PageClose",
+      "to": "s1"
+    },
+    {
+      "from": "s12",
+      "action": "Reset",
+      "to": "s12"
+    },
+    {
+      "from": "s12",
+      "action": "SaveNow",
+      "to": "s12"
+    },
+    {
+      "from": "s12",
+      "action": "TabHidden",
+      "to": "s12"
+    },
+    {
+      "from": "s13",
+      "action": "Autosave",
+      "to": "s13"
+    },
+    {
+      "from": "s13",
+      "action": "Crash",
+      "to": "s2"
+    },
+    {
+      "from": "s13",
+      "action": "Import",
+      "to": "s13"
+    },
+    {
+      "from": "s13",
+      "action": "OtherTabSaves",
+      "to": "s12"
+    },
+    {
+      "from": "s13",
+      "action": "OtherTabWritesNewer",
+      "to": "s13"
+    },
+    {
+      "from": "s13",
+      "action": "PageClose",
+      "to": "s2"
+    },
+    {
+      "from": "s13",
+      "action": "Reset",
+      "to": "s13"
+    },
+    {
+      "from": "s13",
+      "action": "SaveNow",
+      "to": "s13"
+    },
+    {
+      "from": "s13",
+      "action": "TabHidden",
+      "to": "s13"
+    },
+    {
+      "from": "s14",
+      "action": "Open",
+      "to": "s21"
+    },
+    {
+      "from": "s14",
+      "action": "OtherTabSaves",
+      "to": "s14"
+    },
+    {
+      "from": "s14",
+      "action": "OtherTabWritesNewer",
+      "to": "s15"
+    },
+    {
+      "from": "s15",
+      "action": "Open",
+      "to": "s16"
+    },
+    {
+      "from": "s15",
+      "action": "OtherTabSaves",
+      "to": "s14"
+    },
+    {
+      "from": "s15",
+      "action": "OtherTabWritesNewer",
+      "to": "s15"
+    },
+    {
+      "from": "s16",
+      "action": "Autosave",
+      "to": "s16"
+    },
+    {
+      "from": "s16",
+      "action": "Crash",
+      "to": "s15"
+    },
+    {
+      "from": "s16",
+      "action": "Import",
+      "to": "s22"
+    },
+    {
+      "from": "s16",
+      "action": "OtherTabSaves",
+      "to": "s17"
+    },
+    {
+      "from": "s16",
+      "action": "OtherTabWritesNewer",
+      "to": "s18"
+    },
+    {
+      "from": "s16",
+      "action": "PageClose",
+      "to": "s15"
+    },
+    {
+      "from": "s16",
+      "action": "Reset",
+      "to": "s22"
+    },
+    {
+      "from": "s16",
+      "action": "SaveNow",
+      "to": "s22"
+    },
+    {
+      "from": "s16",
+      "action": "TabHidden",
+      "to": "s16"
+    },
+    {
+      "from": "s17",
+      "action": "Autosave",
+      "to": "s17"
+    },
+    {
+      "from": "s17",
+      "action": "Crash",
+      "to": "s14"
+    },
+    {
+      "from": "s17",
+      "action": "Import",
+      "to": "s29"
+    },
+    {
+      "from": "s17",
+      "action": "OtherTabSaves",
+      "to": "s17"
+    },
+    {
+      "from": "s17",
+      "action": "OtherTabWritesNewer",
+      "to": "s18"
+    },
+    {
+      "from": "s17",
+      "action": "PageClose",
+      "to": "s14"
+    },
+    {
+      "from": "s17",
+      "action": "Reset",
+      "to": "s29"
+    },
+    {
+      "from": "s17",
+      "action": "SaveNow",
+      "to": "s29"
+    },
+    {
+      "from": "s17",
+      "action": "StorageEvent",
+      "to": "s19"
+    },
+    {
+      "from": "s17",
+      "action": "TabHidden",
+      "to": "s17"
+    },
+    {
+      "from": "s18",
+      "action": "Autosave",
+      "to": "s18"
+    },
+    {
+      "from": "s18",
+      "action": "Crash",
+      "to": "s15"
+    },
+    {
+      "from": "s18",
+      "action": "Import",
+      "to": "s30"
+    },
+    {
+      "from": "s18",
+      "action": "OtherTabSaves",
+      "to": "s17"
+    },
+    {
+      "from": "s18",
+      "action": "OtherTabWritesNewer",
+      "to": "s18"
+    },
+    {
+      "from": "s18",
+      "action": "PageClose",
+      "to": "s15"
+    },
+    {
+      "from": "s18",
+      "action": "Reset",
+      "to": "s30"
+    },
+    {
+      "from": "s18",
+      "action": "SaveNow",
+      "to": "s30"
+    },
+    {
+      "from": "s18",
+      "action": "StorageEvent",
+      "to": "s20"
+    },
+    {
+      "from": "s18",
+      "action": "TabHidden",
+      "to": "s18"
+    },
+    {
+      "from": "s19",
+      "action": "Autosave",
+      "to": "s19"
+    },
+    {
+      "from": "s19",
+      "action": "Crash",
+      "to": "s14"
+    },
+    {
+      "from": "s19",
+      "action": "Import",
+      "to": "s19"
+    },
+    {
+      "from": "s19",
+      "action": "OtherTabSaves",
+      "to": "s19"
+    },
+    {
+      "from": "s19",
+      "action": "OtherTabWritesNewer",
+      "to": "s20"
+    },
+    {
+      "from": "s19",
+      "action": "PageClose",
+      "to": "s14"
+    },
+    {
+      "from": "s19",
+      "action": "Reset",
+      "to": "s19"
+    },
+    {
+      "from": "s19",
+      "action": "SaveNow",
+      "to": "s19"
+    },
+    {
+      "from": "s19",
+      "action": "TabHidden",
+      "to": "s19"
+    },
+    {
+      "from": "s2",
+      "action": "Open",
+      "to": "s16"
+    },
+    {
+      "from": "s2",
+      "action": "OtherTabSaves",
+      "to": "s1"
+    },
+    {
+      "from": "s2",
+      "action": "OtherTabWritesNewer",
+      "to": "s2"
+    },
+    {
+      "from": "s20",
+      "action": "Autosave",
+      "to": "s20"
+    },
+    {
+      "from": "s20",
+      "action": "Crash",
+      "to": "s15"
+    },
+    {
+      "from": "s20",
+      "action": "Import",
+      "to": "s20"
+    },
+    {
+      "from": "s20",
+      "action": "OtherTabSaves",
+      "to": "s19"
+    },
+    {
+      "from": "s20",
+      "action": "OtherTabWritesNewer",
+      "to": "s20"
+    },
+    {
+      "from": "s20",
+      "action": "PageClose",
+      "to": "s15"
+    },
+    {
+      "from": "s20",
+      "action": "Reset",
+      "to": "s20"
+    },
+    {
+      "from": "s20",
+      "action": "SaveNow",
+      "to": "s20"
+    },
+    {
+      "from": "s20",
+      "action": "TabHidden",
+      "to": "s20"
+    },
+    {
+      "from": "s21",
+      "action": "Autosave",
+      "to": "s21"
+    },
+    {
+      "from": "s21",
+      "action": "Crash",
+      "to": "s14"
+    },
+    {
+      "from": "s21",
+      "action": "Import",
+      "to": "s21"
+    },
+    {
+      "from": "s21",
+      "action": "OtherTabSaves",
+      "to": "s23"
+    },
+    {
+      "from": "s21",
+      "action": "OtherTabWritesNewer",
+      "to": "s24"
+    },
+    {
+      "from": "s21",
+      "action": "PageClose",
+      "to": "s14"
+    },
+    {
+      "from": "s21",
+      "action": "Reset",
+      "to": "s21"
+    },
+    {
+      "from": "s21",
+      "action": "SaveNow",
+      "to": "s21"
+    },
+    {
+      "from": "s21",
+      "action": "TabHidden",
+      "to": "s21"
+    },
+    {
+      "from": "s22",
+      "action": "Autosave",
+      "to": "s22"
+    },
+    {
+      "from": "s22",
+      "action": "Crash",
+      "to": "s14"
+    },
+    {
+      "from": "s22",
+      "action": "Import",
+      "to": "s22"
+    },
+    {
+      "from": "s22",
+      "action": "OtherTabSaves",
+      "to": "s25"
+    },
+    {
+      "from": "s22",
+      "action": "OtherTabWritesNewer",
+      "to": "s26"
+    },
+    {
+      "from": "s22",
+      "action": "PageClose",
+      "to": "s14"
+    },
+    {
+      "from": "s22",
+      "action": "Reset",
+      "to": "s22"
+    },
+    {
+      "from": "s22",
+      "action": "SaveNow",
+      "to": "s22"
+    },
+    {
+      "from": "s22",
+      "action": "TabHidden",
+      "to": "s22"
+    },
+    {
+      "from": "s23",
+      "action": "Autosave",
+      "to": "s27"
+    },
+    {
+      "from": "s23",
+      "action": "Crash",
+      "to": "s14"
+    },
+    {
+      "from": "s23",
+      "action": "Import",
+      "to": "s27"
+    },
+    {
+      "from": "s23",
+      "action": "OtherTabSaves",
+      "to": "s23"
+    },
+    {
+      "from": "s23",
+      "action": "OtherTabWritesNewer",
+      "to": "s24"
+    },
+    {
+      "from": "s23",
+      "action": "PageClose",
+      "to": "s14"
+    },
+    {
+      "from": "s23",
+      "action": "Reset",
+      "to": "s27"
+    },
+    {
+      "from": "s23",
+      "action": "SaveNow",
+      "to": "s27"
+    },
+    {
+      "from": "s23",
+      "action": "StorageEvent",
+      "to": "s27"
+    },
+    {
+      "from": "s23",
+      "action": "TabHidden",
+      "to": "s27"
+    },
+    {
+      "from": "s24",
+      "action": "Autosave",
+      "to": "s28"
+    },
+    {
+      "from": "s24",
+      "action": "Crash",
+      "to": "s15"
+    },
+    {
+      "from": "s24",
+      "action": "Import",
+      "to": "s28"
+    },
+    {
+      "from": "s24",
+      "action": "OtherTabSaves",
+      "to": "s23"
+    },
+    {
+      "from": "s24",
+      "action": "OtherTabWritesNewer",
+      "to": "s24"
+    },
+    {
+      "from": "s24",
+      "action": "PageClose",
+      "to": "s15"
+    },
+    {
+      "from": "s24",
+      "action": "Reset",
+      "to": "s28"
+    },
+    {
+      "from": "s24",
+      "action": "SaveNow",
+      "to": "s28"
+    },
+    {
+      "from": "s24",
+      "action": "StorageEvent",
+      "to": "s28"
+    },
+    {
+      "from": "s24",
+      "action": "TabHidden",
+      "to": "s28"
+    },
+    {
+      "from": "s25",
+      "action": "Autosave",
+      "to": "s29"
+    },
+    {
+      "from": "s25",
+      "action": "Crash",
+      "to": "s14"
+    },
+    {
+      "from": "s25",
+      "action": "Import",
+      "to": "s29"
+    },
+    {
+      "from": "s25",
+      "action": "OtherTabSaves",
+      "to": "s25"
+    },
+    {
+      "from": "s25",
+      "action": "OtherTabWritesNewer",
+      "to": "s26"
+    },
+    {
+      "from": "s25",
+      "action": "PageClose",
+      "to": "s14"
+    },
+    {
+      "from": "s25",
+      "action": "Reset",
+      "to": "s29"
+    },
+    {
+      "from": "s25",
+      "action": "SaveNow",
+      "to": "s29"
+    },
+    {
+      "from": "s25",
+      "action": "StorageEvent",
+      "to": "s29"
+    },
+    {
+      "from": "s25",
+      "action": "TabHidden",
+      "to": "s29"
+    },
+    {
+      "from": "s26",
+      "action": "Autosave",
+      "to": "s30"
+    },
+    {
+      "from": "s26",
+      "action": "Crash",
+      "to": "s15"
+    },
+    {
+      "from": "s26",
+      "action": "Import",
+      "to": "s30"
+    },
+    {
+      "from": "s26",
+      "action": "OtherTabSaves",
+      "to": "s25"
+    },
+    {
+      "from": "s26",
+      "action": "OtherTabWritesNewer",
+      "to": "s26"
+    },
+    {
+      "from": "s26",
+      "action": "PageClose",
+      "to": "s15"
+    },
+    {
+      "from": "s26",
+      "action": "Reset",
+      "to": "s30"
+    },
+    {
+      "from": "s26",
+      "action": "SaveNow",
+      "to": "s30"
+    },
+    {
+      "from": "s26",
+      "action": "StorageEvent",
+      "to": "s30"
+    },
+    {
+      "from": "s26",
+      "action": "TabHidden",
+      "to": "s30"
+    },
+    {
+      "from": "s27",
+      "action": "Autosave",
+      "to": "s27"
+    },
+    {
+      "from": "s27",
+      "action": "Crash",
+      "to": "s14"
+    },
+    {
+      "from": "s27",
+      "action": "Import",
+      "to": "s27"
+    },
+    {
+      "from": "s27",
+      "action": "OtherTabSaves",
+      "to": "s27"
+    },
+    {
+      "from": "s27",
+      "action": "OtherTabWritesNewer",
+      "to": "s28"
+    },
+    {
+      "from": "s27",
+      "action": "PageClose",
+      "to": "s14"
+    },
+    {
+      "from": "s27",
+      "action": "Reset",
+      "to": "s27"
+    },
+    {
+      "from": "s27",
+      "action": "SaveNow",
+      "to": "s27"
+    },
+    {
+      "from": "s27",
+      "action": "TabHidden",
+      "to": "s27"
+    },
+    {
+      "from": "s28",
+      "action": "Autosave",
+      "to": "s28"
+    },
+    {
+      "from": "s28",
+      "action": "Crash",
+      "to": "s15"
+    },
+    {
+      "from": "s28",
+      "action": "Import",
+      "to": "s28"
+    },
+    {
+      "from": "s28",
+      "action": "OtherTabSaves",
+      "to": "s27"
+    },
+    {
+      "from": "s28",
+      "action": "OtherTabWritesNewer",
+      "to": "s28"
+    },
+    {
+      "from": "s28",
+      "action": "PageClose",
+      "to": "s15"
+    },
+    {
+      "from": "s28",
+      "action": "Reset",
+      "to": "s28"
+    },
+    {
+      "from": "s28",
+      "action": "SaveNow",
+      "to": "s28"
+    },
+    {
+      "from": "s28",
+      "action": "TabHidden",
+      "to": "s28"
+    },
+    {
+      "from": "s29",
+      "action": "Autosave",
+      "to": "s29"
+    },
+    {
+      "from": "s29",
+      "action": "Crash",
+      "to": "s14"
+    },
+    {
+      "from": "s29",
+      "action": "Import",
+      "to": "s29"
+    },
+    {
+      "from": "s29",
+      "action": "OtherTabSaves",
+      "to": "s29"
+    },
+    {
+      "from": "s29",
+      "action": "OtherTabWritesNewer",
+      "to": "s30"
+    },
+    {
+      "from": "s29",
+      "action": "PageClose",
+      "to": "s14"
+    },
+    {
+      "from": "s29",
+      "action": "Reset",
+      "to": "s29"
+    },
+    {
+      "from": "s29",
+      "action": "SaveNow",
+      "to": "s29"
+    },
+    {
+      "from": "s29",
+      "action": "TabHidden",
+      "to": "s29"
+    },
+    {
+      "from": "s3",
+      "action": "Autosave",
+      "to": "s4"
+    },
+    {
+      "from": "s3",
+      "action": "Crash",
+      "to": "s0"
+    },
+    {
+      "from": "s3",
+      "action": "Import",
+      "to": "s4"
+    },
+    {
+      "from": "s3",
+      "action": "OtherTabSaves",
+      "to": "s6"
+    },
+    {
+      "from": "s3",
+      "action": "OtherTabWritesNewer",
+      "to": "s7"
+    },
+    {
+      "from": "s3",
+      "action": "PageClose",
+      "to": "s1"
+    },
+    {
+      "from": "s3",
+      "action": "Reset",
+      "to": "s4"
+    },
+    {
+      "from": "s3",
+      "action": "SaveNow",
+      "to": "s4"
+    },
+    {
+      "from": "s3",
+      "action": "TabHidden",
+      "to": "s4"
+    },
+    {
+      "from": "s30",
+      "action": "Autosave",
+      "to": "s30"
+    },
+    {
+      "from": "s30",
+      "action": "Crash",
+      "to": "s15"
+    },
+    {
+      "from": "s30",
+      "action": "Import",
+      "to": "s30"
+    },
+    {
+      "from": "s30",
+      "action": "OtherTabSaves",
+      "to": "s29"
+    },
+    {
+      "from": "s30",
+      "action": "OtherTabWritesNewer",
+      "to": "s30"
+    },
+    {
+      "from": "s30",
+      "action": "PageClose",
+      "to": "s15"
+    },
+    {
+      "from": "s30",
+      "action": "Reset",
+      "to": "s30"
+    },
+    {
+      "from": "s30",
+      "action": "SaveNow",
+      "to": "s30"
+    },
+    {
+      "from": "s30",
+      "action": "TabHidden",
+      "to": "s30"
+    },
+    {
+      "from": "s4",
+      "action": "Autosave",
+      "to": "s4"
+    },
+    {
+      "from": "s4",
+      "action": "Crash",
+      "to": "s1"
+    },
+    {
+      "from": "s4",
+      "action": "Import",
+      "to": "s4"
+    },
+    {
+      "from": "s4",
+      "action": "OtherTabSaves",
+      "to": "s6"
+    },
+    {
+      "from": "s4",
+      "action": "OtherTabWritesNewer",
+      "to": "s7"
+    },
+    {
+      "from": "s4",
+      "action": "PageClose",
+      "to": "s1"
+    },
+    {
+      "from": "s4",
+      "action": "Reset",
+      "to": "s4"
+    },
+    {
+      "from": "s4",
+      "action": "SaveNow",
+      "to": "s4"
+    },
+    {
+      "from": "s4",
+      "action": "TabHidden",
+      "to": "s4"
+    },
+    {
+      "from": "s5",
+      "action": "Autosave",
+      "to": "s5"
+    },
+    {
+      "from": "s5",
+      "action": "Crash",
+      "to": "s1"
+    },
+    {
+      "from": "s5",
+      "action": "Import",
+      "to": "s5"
+    },
+    {
+      "from": "s5",
+      "action": "OtherTabSaves",
+      "to": "s8"
+    },
+    {
+      "from": "s5",
+      "action": "OtherTabWritesNewer",
+      "to": "s9"
+    },
+    {
+      "from": "s5",
+      "action": "PageClose",
+      "to": "s1"
+    },
+    {
+      "from": "s5",
+      "action": "Reset",
+      "to": "s5"
+    },
+    {
+      "from": "s5",
+      "action": "SaveNow",
+      "to": "s5"
+    },
+    {
+      "from": "s5",
+      "action": "TabHidden",
+      "to": "s5"
+    },
+    {
+      "from": "s6",
+      "action": "Autosave",
+      "to": "s10"
+    },
+    {
+      "from": "s6",
+      "action": "Crash",
+      "to": "s1"
+    },
+    {
+      "from": "s6",
+      "action": "Import",
+      "to": "s10"
+    },
+    {
+      "from": "s6",
+      "action": "OtherTabSaves",
+      "to": "s6"
+    },
+    {
+      "from": "s6",
+      "action": "OtherTabWritesNewer",
+      "to": "s7"
+    },
+    {
+      "from": "s6",
+      "action": "PageClose",
+      "to": "s1"
+    },
+    {
+      "from": "s6",
+      "action": "Reset",
+      "to": "s10"
+    },
+    {
+      "from": "s6",
+      "action": "SaveNow",
+      "to": "s10"
+    },
+    {
+      "from": "s6",
+      "action": "StorageEvent",
+      "to": "s10"
+    },
+    {
+      "from": "s6",
+      "action": "TabHidden",
+      "to": "s10"
+    },
+    {
+      "from": "s7",
+      "action": "Autosave",
+      "to": "s11"
+    },
+    {
+      "from": "s7",
+      "action": "Crash",
+      "to": "s2"
+    },
+    {
+      "from": "s7",
+      "action": "Import",
+      "to": "s11"
+    },
+    {
+      "from": "s7",
+      "action": "OtherTabSaves",
+      "to": "s6"
+    },
+    {
+      "from": "s7",
+      "action": "OtherTabWritesNewer",
+      "to": "s7"
+    },
+    {
+      "from": "s7",
+      "action": "PageClose",
+      "to": "s2"
+    },
+    {
+      "from": "s7",
+      "action": "Reset",
+      "to": "s11"
+    },
+    {
+      "from": "s7",
+      "action": "SaveNow",
+      "to": "s11"
+    },
+    {
+      "from": "s7",
+      "action": "StorageEvent",
+      "to": "s11"
+    },
+    {
+      "from": "s7",
+      "action": "TabHidden",
+      "to": "s11"
+    },
+    {
+      "from": "s8",
+      "action": "Autosave",
+      "to": "s12"
+    },
+    {
+      "from": "s8",
+      "action": "Crash",
+      "to": "s1"
+    },
+    {
+      "from": "s8",
+      "action": "Import",
+      "to": "s12"
+    },
+    {
+      "from": "s8",
+      "action": "OtherTabSaves",
+      "to": "s8"
+    },
+    {
+      "from": "s8",
+      "action": "OtherTabWritesNewer",
+      "to": "s9"
+    },
+    {
+      "from": "s8",
+      "action": "PageClose",
+      "to": "s1"
+    },
+    {
+      "from": "s8",
+      "action": "Reset",
+      "to": "s12"
+    },
+    {
+      "from": "s8",
+      "action": "SaveNow",
+      "to": "s12"
+    },
+    {
+      "from": "s8",
+      "action": "StorageEvent",
+      "to": "s12"
+    },
+    {
+      "from": "s8",
+      "action": "TabHidden",
+      "to": "s12"
+    },
+    {
+      "from": "s9",
+      "action": "Autosave",
+      "to": "s13"
+    },
+    {
+      "from": "s9",
+      "action": "Crash",
+      "to": "s2"
+    },
+    {
+      "from": "s9",
+      "action": "Import",
+      "to": "s13"
+    },
+    {
+      "from": "s9",
+      "action": "OtherTabSaves",
+      "to": "s8"
+    },
+    {
+      "from": "s9",
+      "action": "OtherTabWritesNewer",
+      "to": "s9"
+    },
+    {
+      "from": "s9",
+      "action": "PageClose",
+      "to": "s2"
+    },
+    {
+      "from": "s9",
+      "action": "Reset",
+      "to": "s13"
+    },
+    {
+      "from": "s9",
+      "action": "SaveNow",
+      "to": "s13"
+    },
+    {
+      "from": "s9",
+      "action": "StorageEvent",
+      "to": "s13"
+    },
+    {
+      "from": "s9",
+      "action": "TabHidden",
+      "to": "s13"
+    }
+  ]
+}

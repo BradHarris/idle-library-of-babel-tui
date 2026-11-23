@@ -7,13 +7,15 @@ import { generatePage, queryToPageAddress } from '@game/page';
 import { ACHIEVEMENTS } from '@game/achievements';
 import { formatCount, formatMoney, formatMultiplier, formatPageNumber } from '@game/format';
 import { UPGRADES, getUpgrade } from '@game/upgrades';
+import { MAX_GUESSES, PUZZLES } from '@game/puzzles';
 import { AUTOSAVE_MS, createInitialState, getSpeedCost } from '@game/config';
 import { D } from '@game/bignum';
 import { BACKUP_KEY, SAVE_KEY, SAVE_VERSION, encodeSave, exportSave } from '@game/save';
 import { RESET_CONFIRM_MS } from './components/SavePanel';
-import { containerOf, levelName, localIndex, zoomPath } from '@game/storageMap';
+import { MIN_LEVEL, PAGES_PER, TOP_LEVEL, containerOf, levelId, levelName, localIndex, zoomPath } from '@game/storageMap';
 import { App } from './App';
 import { ZOOM_STEP_MS } from './ui';
+import { SETTINGS_KEY } from './settings';
 
 // jsdom has no <dialog> methods
 HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
@@ -92,6 +94,17 @@ describe('App', () => {
     expect(panel('upgrades').classList.contains('hidden')).toBe(false);
     expect(panel('workers').classList.contains('hidden')).toBe(true);
     expect(panel('log').classList.contains('hidden')).toBe(true);
+
+    // Log, Achievements and Settings (which holds Save) are each their own page
+    const pages = ['log', 'achievements', 'settings'] as const;
+    for (const tab of pages) {
+      root.querySelector<HTMLButtonElement>(`[data-tab="${tab}"]`)!.click();
+      flush();
+      for (const other of pages) expect(panel(other).classList.contains('hidden')).toBe(other !== tab);
+    }
+    expect(window.location.hash).toBe('#/settings');
+    expect(panel('settings').querySelector('[data-panel-save]')).not.toBeNull();
+    expect(panel('settings').querySelector('[data-panel-settings]')).not.toBeNull();
   });
 
   it('search reports a phrase as not yet discovered at the start', () => {
@@ -325,6 +338,8 @@ describe('App — saving', () => {
     expect(stat(root, 'money')).toBe(formatMoney(0));
     expect(notice(root)).toBe('Game reset');
     expect(savedState().money).toEqual([0, 0]);
+    // Its own reset isn't another tab's write
+    expect(root.querySelector('[data-halted]')).toBeNull();
   });
 
   it('imports an exported save, and reports a bad one inline', async () => {
@@ -382,6 +397,94 @@ describe('App — saving', () => {
     flush();
     expect(notice(root)).toBe('Saved');
     expect(localStorage.getItem(SAVE_KEY)).not.toBe(newer);
+  });
+
+  describe('another tab saving', () => {
+    /** A save written by another tab running the game. */
+    const otherTabSave = () => {
+      const s = createInitialState();
+      s.money = D(999);
+      return encodeSave(s, Date.now());
+    };
+    const halted = (root: HTMLElement) => root.querySelector('[data-halted]') !== null;
+
+    it('halts as soon as the browser reports it: stops the game, never writes again, asks for a reload', async () => {
+      vi.useFakeTimers();
+      const root = mount();
+      flush();
+      vi.advanceTimersByTime(AUTOSAVE_MS);
+      flush();
+      expect(halted(root)).toBe(false);
+
+      const other = otherTabSave();
+      localStorage.setItem(SAVE_KEY, other);
+      window.dispatchEvent(new StorageEvent('storage', { key: SAVE_KEY }));
+      flush();
+      expect(halted(root)).toBe(true);
+      expect(root.querySelector('[data-halted]')!.textContent).toContain('another tab');
+
+      // The game is stopped
+      const pages = stat(root, 'pages');
+      vi.advanceTimersByTime(5_000);
+      flush();
+      expect(stat(root, 'pages')).toBe(pages);
+
+      // Nothing writes over the other tab's save: autosave, hiding, closing, Save now, Reset
+      vi.advanceTimersByTime(AUTOSAVE_MS * 2);
+      flush();
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      delete (document as { visibilityState?: string }).visibilityState;
+      click(root, 'now');
+      click(root, 'reset');
+      flush();
+      click(root, 'reset');
+      flush();
+      await settle();
+      window.dispatchEvent(new Event('pagehide'));
+      expect(localStorage.getItem(SAVE_KEY)).toBe(other);
+    });
+
+    it('checks the save before writing, even if the browser has not reported the change yet', () => {
+      vi.useFakeTimers();
+      const root = mount();
+      flush();
+      const other = otherTabSave();
+      localStorage.setItem(SAVE_KEY, other);
+
+      vi.advanceTimersByTime(AUTOSAVE_MS);
+      flush();
+      expect(localStorage.getItem(SAVE_KEY)).toBe(other);
+      expect(halted(root)).toBe(true);
+    });
+
+    it("halts instead of resetting another tab's save", async () => {
+      vi.useFakeTimers();
+      const root = mount();
+      flush();
+      const other = otherTabSave();
+      localStorage.setItem(SAVE_KEY, other);
+
+      click(root, 'reset');
+      flush();
+      click(root, 'reset');
+      flush();
+      await settle();
+      expect(localStorage.getItem(SAVE_KEY)).toBe(other);
+      expect(halted(root)).toBe(true);
+    });
+
+    it('ignores writes to other keys', () => {
+      vi.useFakeTimers();
+      const root = mount();
+      flush();
+      localStorage.setItem(SETTINGS_KEY, '{"fps":15}');
+      window.dispatchEvent(new StorageEvent('storage', { key: SETTINGS_KEY }));
+      vi.advanceTimersByTime(AUTOSAVE_MS);
+      flush();
+      expect(halted(root)).toBe(false);
+      expect(savedState()).toBeTruthy();
+    });
   });
 });
 
@@ -444,8 +547,12 @@ describe('App — upgrades tab', () => {
     expect(badge()).toBe('2');
     // Faster moved out of the HUD and into the Upgrades panel
     expect(root.querySelector('header [data-upgrade-id="speed"]')).toBeNull();
-    root.querySelector<HTMLButtonElement>('[data-panel="upgrades"] [data-upgrade-id="speed"]')!.click();
+    const faster = root.querySelector<HTMLButtonElement>('[data-panel="upgrades"] [data-upgrade-id="speed"]')!;
+    // Names the level you'd be buying, not the one you have
+    expect(faster.textContent).toContain('Faster (level 1)');
+    faster.click();
     flush();
+    expect(faster.textContent).toContain('Faster (level 2)');
     expect(root.querySelector('[data-stat="output"]')!.textContent).toContain('faster lv.1');
     // Sharper Quills is still affordable; the next Faster isn't
     expect(badge()).toBe('1');
@@ -525,5 +632,276 @@ describe('App — URL routing', () => {
     expect(history.length).toBe(before + 2);
     const page = containerOf(address, path.at(-1)!.level);
     expect(location.hash).toBe(`#/library?view=page.${page.index}&target=${address}`);
+  });
+});
+
+describe('App — frame rate cap', () => {
+  it('ticks at the chosen rate and remembers it', () => {
+    vi.useFakeTimers();
+    const intervals = vi.spyOn(globalThis, 'setInterval');
+    const root = mount();
+    flush();
+    const tickDelays = () => intervals.mock.calls.map(c => c[1]).filter(ms => ms !== AUTOSAVE_MS);
+    expect(tickDelays()).toEqual([50]); // desktop default: 20 fps
+
+    root.querySelector<HTMLButtonElement>('[data-fps="5"]')!.click();
+    flush();
+    expect(tickDelays()).toEqual([50, 200]);
+    expect(root.querySelector('[data-fps="5"]')!.getAttribute('aria-pressed')).toBe('true');
+    expect(JSON.parse(localStorage.getItem(SETTINGS_KEY)!)).toEqual({ fps: 5 });
+
+    // Time still counts in full at the lower rate: 10 s of one writer is ~10 pages
+    vi.advanceTimersByTime(10_000);
+    flush();
+    expect(Number(stat(root, 'pages'))).toBeGreaterThanOrEqual(9);
+  });
+});
+
+describe('App — storage map rendering', () => {
+  it('walks every level with no diagnostics, nothing animating inside the SVG, and formatted cell sizes', async () => {
+    let root!: HTMLElement;
+    const labels: string[] = [];
+    const svgPulses: number[] = [];
+    const { artifact } = await captureArtifact(
+      () => {
+        root = mount();
+        flush();
+        for (let level = MIN_LEVEL + 1; level <= TOP_LEVEL; level++) {
+          history.pushState(null, '', `/#/library?view=${levelId(level)}.0`);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+          flush();
+          labels.push(root.querySelector('#storage-map p > span')!.textContent ?? '');
+          // Animating an SVG child repaints the whole drawing every frame
+          svgPulses.push(root.querySelectorAll('#storage-map svg .animate-pulse').length);
+        }
+      },
+      { scenario: 'map-every-level' }
+    );
+    expect(artifact).toHaveNoDiagnostics();
+    expect(svgPulses.every(n => n === 0)).toBe(true);
+    // e.g. "each cell is one drive (1.26e11 pages)": the number format, never "125,660,…"
+    const sizes = labels.map(l => /\(([^)]*) pages\)/.exec(l)?.[1]).filter(Boolean);
+    expect(sizes.length).toBeGreaterThan(10);
+    for (const size of sizes) expect(size).not.toContain(',');
+    expect(labels).toContain(`each cell is one drive (${formatCount(PAGES_PER[0]!)} pages)`);
+  });
+
+  it('pulses the cell being written as an HTML overlay', () => {
+    vi.useFakeTimers();
+    const root = mount();
+    flush();
+    // Up two levels, to cells of many pages each, so the first is part-written
+    root.querySelector<HTMLButtonElement>('button[aria-label="Zoom out"]')!.click();
+    flush();
+    root.querySelector<HTMLButtonElement>('button[aria-label="Zoom out"]')!.click();
+    vi.advanceTimersByTime(3_000);
+    flush();
+    const pulse = root.querySelector<HTMLElement>('#storage-map [data-map-pulse="writing"]');
+    expect(pulse).not.toBeNull();
+    expect(pulse!.closest('svg')).toBeNull();
+    expect(pulse!.classList.contains('animate-pulse')).toBe(true);
+  });
+});
+
+describe('Reading Room', () => {
+  const first = PUZZLES[0]!;
+
+  function mountWithPages(pages: bigint, patch: (s: ReturnType<typeof createInitialState>) => void = () => {}) {
+    const s = createInitialState();
+    s.pagesGenerated = pages;
+    s.currentPage = pages;
+    patch(s);
+    localStorage.setItem(SAVE_KEY, encodeSave(s, Date.now()));
+    history.replaceState(null, '', '/#/puzzles');
+    const root = mount();
+    flush();
+    return root;
+  }
+
+  const tiles = (root: HTMLElement) =>
+    [...root.querySelectorAll<HTMLButtonElement>('[data-puzzle-board] [data-tile]')].map(b => b.textContent).join('');
+  const key = (k: string) => {
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+    flush();
+  };
+  const click = (root: HTMLElement, sel: string) => {
+    root.querySelector<HTMLButtonElement>(sel)!.click();
+    flush();
+  };
+
+  it('waits for the first scrambled page, then shows only the count and the current puzzle', () => {
+    const early = mountWithPages(0n);
+    expect(early.querySelector('[data-puzzle-board]')).toBeNull();
+    expect(early.querySelector('[data-next-puzzle]')!.textContent).toContain(`${first.length} letters`);
+    expect(early.querySelector('[data-tab="puzzles"] [data-tab-badge]')).toBeNull();
+    expect(early.querySelector('[data-stat="insight"]')).toBeNull();
+    dispose?.();
+    document.body.innerHTML = '';
+
+    const open = PUZZLES.filter(p => p.length === 5);
+    const root = mountWithPages(open.at(-1)!.unlockPage);
+    expect(root.querySelector('[data-puzzles-available]')!.textContent).toBe(String(open.length));
+    expect(root.querySelector('[data-tab="puzzles"] [data-tab-badge]')!.textContent).toBe(String(open.length));
+    // One board, for the oldest puzzle; no list of the others
+    expect(root.querySelectorAll('[data-puzzle-board]').length).toBe(1);
+    expect(root.querySelector(`[data-puzzle-board="${first.id}"]`)).not.toBeNull();
+    expect(root.querySelector('[data-puzzle-id]')).toBeNull();
+    expect(root.querySelector('[data-stat="insight"]')!.textContent).toContain('0 insight');
+  });
+
+  it('swaps by tapping, types into the tiles, solves and spends the Insight, with no diagnostics', async () => {
+    let root!: HTMLElement;
+    const { artifact } = await captureArtifact(
+      () => {
+        root = mountWithPages(first.unlockPage);
+        expect(tiles(root)).toBe(first.scramble);
+        expect(root.querySelector('[data-guess-info]')!.textContent).toContain(`Guess 1 of ${MAX_GUESSES} · free`);
+
+        // Tap two tiles to swap them, then guess
+        click(root, '[data-puzzle-board] [data-tile="0"]');
+        click(root, '[data-puzzle-board] [data-tile="1"]');
+        const swapped = first.scramble[1]! + first.scramble[0]! + first.scramble.slice(2);
+        expect(tiles(root)).toBe(swapped);
+        click(root, '[data-submit-guess]');
+        const marks = [...root.querySelectorAll('[data-guess-row] [data-correct]')].map(x => x.getAttribute('data-correct') === 'true');
+        expect(marks).toEqual([...swapped].map((c, i) => c === first.word[i]));
+        expect(root.querySelector('[data-puzzle-message]')!.textContent).toMatch(/in the right spot$/);
+
+        // Typing moves each letter into place at the cursor; Backspace steps back
+        key(first.word[0]!);
+        expect(tiles(root)[0]).toBe(first.word[0]);
+        expect(root.querySelector('[data-tile="1"]')!.getAttribute('data-cursor')).toBe('true');
+        key('Backspace');
+        expect(root.querySelector('[data-tile="0"]')!.getAttribute('data-cursor')).toBe('true');
+        for (const c of first.word) key(c);
+        expect(tiles(root)).toBe(first.word);
+        key('Enter');
+      },
+      { scenario: 'reading-room' }
+    );
+
+    expect(artifact).toHaveNoDiagnostics();
+    expect(root.querySelector('[data-puzzle-outcome="solved"]')!.textContent).toContain(`+${first.reward} ✦`);
+    expect(root.querySelector('[data-puzzle-board]')).toBeNull();
+    expect(root.textContent).toContain('No scrambled pages waiting');
+    expect(root.textContent).toContain(`Unscrambled "${first.word}"`);
+    click(root, '[data-insight-id="lucidity"]');
+    expect(root.querySelector('[data-insight-level]')!.textContent).toBe('lv.1');
+  });
+
+  it('types from a phone keyboard through the hidden input, which keeps focus into the next puzzle, with no diagnostics', async () => {
+    const second = PUZZLES[1]!;
+    let root!: HTMLElement;
+    let input!: HTMLInputElement;
+    const { artifact } = await captureArtifact(
+      () => {
+        root = mountWithPages(second.unlockPage);
+        input = root.querySelector<HTMLInputElement>('[data-puzzle-input]')!;
+        // What a soft keyboard does: change the value, then fire input (its keydown says "Unidentified")
+        const softType = (value: string, inputType = 'insertText') => {
+          input.value = value;
+          input.dispatchEvent(new InputEvent('input', { inputType, bubbles: true }));
+          flush();
+        };
+        click(root, '[data-open-keyboard]');
+        expect(document.activeElement).toBe(input);
+        expect(root.querySelector('[data-open-keyboard]')!.getAttribute('aria-pressed')).toBe('true');
+
+        // Several letters in one event (autocomplete, a paste) all land
+        softType(' ' + first.word.slice(0, 3));
+        expect(tiles(root).slice(0, 3)).toBe(first.word.slice(0, 3));
+        expect(root.querySelector('[data-tile="3"]')!.getAttribute('data-cursor')).toBe('true');
+        // Backspace removes a character from the value
+        softType(' ' + first.word.slice(0, 2), 'deleteContentBackward');
+        expect(root.querySelector('[data-tile="2"]')!.getAttribute('data-cursor')).toBe('true');
+        // Backspace on the sentinel space (nothing typed in the field) still steps back
+        softType('', 'deleteContentBackward');
+        expect(root.querySelector('[data-tile="0"]')!.getAttribute('data-cursor')).toBe('true');
+        expect(input.value).toBe(' ');
+
+        softType(' ' + first.word);
+        expect(tiles(root)).toBe(first.word);
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        flush();
+      },
+      { scenario: 'reading-room-soft-keyboard' }
+    );
+    expect(artifact).toHaveNoDiagnostics();
+    expect(root.querySelector('[data-puzzle-outcome="solved"]')).not.toBeNull();
+    // The next puzzle, on the same board: the keyboard's input is the same element and still focused
+    expect(root.querySelector(`[data-puzzle-board="${second.id}"]`)).not.toBeNull();
+    expect(root.querySelector('[data-puzzle-input]')).toBe(input);
+    expect(document.activeElement).toBe(input);
+    // ...and the board's state started over
+    expect(tiles(root)).toBe(second.scramble);
+    expect(root.querySelector('[data-tile="0"]')!.getAttribute('data-cursor')).toBe('true');
+    expect(root.querySelector('[data-guess-info]')!.textContent).toContain('Guess 1 of');
+    expect(root.querySelector('[data-puzzle-message]')!.textContent).toBe('');
+  });
+
+  it('fades letters not yet typed, and a clicked tile can be carried with the arrows', () => {
+    const root = mountWithPages(first.unlockPage);
+    const tile = (i: number) => root.querySelector<HTMLButtonElement>(`[data-puzzle-board] [data-tile="${i}"]`)!;
+    expect(tile(0).getAttribute('data-cursor')).toBe('true');
+    expect(tile(0).querySelector('[data-caret]')).not.toBeNull();
+    expect(tile(1).className).toContain('text-ink/40');
+    key(first.scramble[0]!);
+    expect(tile(0).className).not.toContain('text-ink/40');
+    expect(tile(1).querySelector('[data-caret]')).not.toBeNull();
+    expect(root.querySelectorAll('[data-caret]').length).toBe(1);
+
+    const before = tiles(root);
+    click(root, '[data-puzzle-board] [data-tile="2"]');
+    key('ArrowRight');
+    expect(tiles(root)).toBe(before.slice(0, 2) + before[3] + before[2] + before.slice(4));
+    expect(tile(3).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('charges for the fourth guess and loses on a wrong fifth', () => {
+    const root = mountWithPages(first.unlockPage, s => {
+      s.puzzleGuesses[first.id] = [first.scramble, first.scramble, first.scramble];
+      s.insight = 1;
+    });
+    expect(root.querySelector('[data-guess-info]')!.textContent).toContain('Guess 4 of 5 · costs 1 ✦');
+    click(root, '[data-submit-guess]');
+    expect(root.querySelector('[data-stat="insight"]')!.textContent).toContain('0 insight');
+    // Can't pay for the fifth: the Guess button is disabled
+    expect(root.querySelector<HTMLButtonElement>('[data-submit-guess]')!.disabled).toBe(true);
+    dispose?.();
+    document.body.innerHTML = '';
+
+    const again = mountWithPages(first.unlockPage, s => {
+      s.puzzleGuesses[first.id] = [first.scramble, first.scramble, first.scramble, first.scramble];
+      s.insight = 1;
+    });
+    click(again, '[data-submit-guess]');
+    expect(again.querySelector('[data-puzzle-outcome="lost"]')!.textContent).toContain(first.word);
+    expect(again.querySelector('[data-puzzle-board]')).toBeNull();
+    expect(again.textContent).toContain(`Out of guesses: the word was "${first.word}"`);
+  });
+
+  it('gives up for nothing, moving on to the next puzzle', () => {
+    const second = PUZZLES[1]!;
+    const root = mountWithPages(second.unlockPage);
+    click(root, '[data-give-up]');
+    expect(root.querySelector('[data-puzzle-outcome="lost"]')).not.toBeNull();
+    expect(root.querySelector(`[data-puzzle-board="${second.id}"]`)).not.toBeNull();
+    expect(root.querySelector('[data-puzzles-available]')!.textContent).toBe('1');
+  });
+
+  it('remembers guesses across a reload and shows automation switches once bought', () => {
+    const root = mountWithPages(first.unlockPage, s => {
+      s.puzzleGuesses[first.id] = [first.scramble];
+      s.insightUpgrades.clerks = 1;
+    });
+    expect(root.querySelectorAll('[data-guess-row]').length).toBe(1);
+    expect(root.querySelector('[data-guess-info]')!.textContent).toContain('Guess 2 of');
+
+    const writers = root.querySelector<HTMLInputElement>('[data-automation-key="hire-writer"]')!;
+    expect(writers.checked).toBe(true);
+    writers.click();
+    flush();
+    expect(writers.checked).toBe(false);
+    expect(root.querySelector('[data-automation-key="speed"]')).toBeNull();
   });
 });

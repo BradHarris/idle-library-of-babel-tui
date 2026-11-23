@@ -1,6 +1,8 @@
-import { TIERS, LOG_MAX_ENTRIES, OFFLINE_BOOST_MAX_SECONDS, createInitialState } from './config.js';
+import { TIERS, LOG_MAX_ENTRIES, createInitialState } from './config.js';
 import { ACHIEVEMENTS } from './achievements.js';
 import { UPGRADES } from './upgrades.js';
+import { MAX_GUESSES, getPuzzle, isArrangement } from './puzzles.js';
+import { INSIGHT_UPGRADES, automationUpgradeFor, insightBoostCap } from './insight.js';
 import { Decimal } from './bignum.js';
 import type { GameState, LogEntry, UnlockedAchievement } from './types.js';
 
@@ -47,6 +49,13 @@ export interface SavedStateV1 {
   boostSeconds: number;
   /** Bought upgrade ids (added within v1; missing in older v1 saves). */
   upgrades: string[];
+  // Reading Room (added within v1; missing in older v1 saves)
+  insight: number;
+  puzzlesSolved: string[];
+  puzzlesFailed: string[];
+  puzzleGuesses: Record<string, string[]>;
+  insightUpgrades: Record<string, number>;
+  automation: Record<string, boolean>;
 }
 
 export interface SaveFile {
@@ -90,6 +99,12 @@ export function toSaveFile(state: GameState, now: number): SaveFile {
       searchesFound: state.searchesFound,
       boostSeconds: state.boostSeconds,
       upgrades: [...state.upgrades],
+      insight: state.insight,
+      puzzlesSolved: [...state.puzzlesSolved],
+      puzzlesFailed: [...state.puzzlesFailed],
+      puzzleGuesses: Object.fromEntries(Object.entries(state.puzzleGuesses).map(([id, g]) => [id, [...g]])),
+      insightUpgrades: { ...state.insightUpgrades },
+      automation: { ...state.automation },
     },
   };
 }
@@ -166,9 +181,6 @@ export function hydrate(data: unknown): GameState {
   if (isFiniteNum(data.time) && data.time >= 0) s.time = data.time;
   if (isInt(data.searches) && data.searches >= 0) s.searches = data.searches;
   if (isInt(data.searchesFound) && data.searchesFound >= 0) s.searchesFound = data.searchesFound;
-  if (isFiniteNum(data.boostSeconds) && data.boostSeconds >= 0) {
-    s.boostSeconds = Math.min(OFFLINE_BOOST_MAX_SECONDS, data.boostSeconds);
-  }
 
   if (Array.isArray(data.achievements)) {
     const known = new Set(ACHIEVEMENTS.map(a => a.id));
@@ -183,6 +195,37 @@ export function hydrate(data: unknown): GameState {
   if (Array.isArray(data.upgrades)) {
     const known = new Set(UPGRADES.map(u => u.id));
     s.upgrades = [...new Set(data.upgrades.filter((id): id is string => typeof id === 'string' && known.has(id)))];
+  }
+
+  if (isFiniteNum(data.insight) && data.insight >= 0) s.insight = data.insight;
+  const puzzleIds = (x: unknown): string[] =>
+    Array.isArray(x) ? [...new Set(x.filter((id): id is string => typeof id === 'string' && getPuzzle(id) !== undefined))] : [];
+  s.puzzlesSolved = puzzleIds(data.puzzlesSolved);
+  // A puzzle is solved or lost, never both
+  s.puzzlesFailed = puzzleIds(data.puzzlesFailed).filter(id => !s.puzzlesSolved.includes(id));
+  if (isObject(data.puzzleGuesses)) {
+    for (const [id, guesses] of Object.entries(data.puzzleGuesses)) {
+      const puzzle = getPuzzle(id);
+      if (!puzzle || !Array.isArray(guesses)) continue;
+      const valid = guesses.filter((g): g is string => typeof g === 'string' && isArrangement(puzzle, g));
+      if (valid.length) s.puzzleGuesses[id] = valid.slice(0, MAX_GUESSES);
+    }
+  }
+  if (isObject(data.insightUpgrades)) {
+    for (const u of INSIGHT_UPGRADES) {
+      const level = data.insightUpgrades[u.id];
+      if (isInt(level) && level > 0) s.insightUpgrades[u.id] = Math.min(u.maxLevel, level);
+    }
+  }
+  if (isObject(data.automation)) {
+    for (const [key, on] of Object.entries(data.automation)) {
+      if (typeof on === 'boolean' && automationUpgradeFor(key) !== null) s.automation[key] = on;
+    }
+  }
+
+  // After the Insight upgrades: Long Memory raises the cap
+  if (isFiniteNum(data.boostSeconds) && data.boostSeconds >= 0) {
+    s.boostSeconds = Math.min(insightBoostCap(s), data.boostSeconds);
   }
   return s;
 }
@@ -242,6 +285,15 @@ export function importSave(text: string): LoadResult {
 function defaultStorage(): Storage | null {
   try {
     return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The save slot's exact contents (null if empty or storage is unavailable). */
+export function readRawSave(storage: Storage | null = defaultStorage()): string | null {
+  try {
+    return storage?.getItem(SAVE_KEY) ?? null;
   } catch {
     return null;
   }

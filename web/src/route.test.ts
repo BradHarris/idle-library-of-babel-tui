@@ -14,6 +14,10 @@ describe('route', () => {
     const rack = tierLevel('serverRack');
     const routes: Route[] = [
       { tab: 'upgrades', map: DEFAULT_ROUTE.map, target: null },
+      { tab: 'puzzles', map: DEFAULT_ROUTE.map, target: null },
+      { tab: 'log', map: DEFAULT_ROUTE.map, target: null },
+      { tab: 'achievements', map: DEFAULT_ROUTE.map, target: null },
+      { tab: 'settings', map: DEFAULT_ROUTE.map, target: null },
       { tab: 'library', map: { follow: true, level: MIN_LEVEL + 1 }, target: null },
       { tab: 'library', map: { follow: false, view: { level: rack, index: 12n } }, target: 2n ** 90n },
       { tab: 'workers', map: { follow: false, view: { level: MIN_LEVEL, index: 0n } }, target: 0n },

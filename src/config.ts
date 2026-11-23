@@ -8,7 +8,8 @@ import type { Tier, StorageTier, GameState } from './types.js';
  *
  * Tuned with the simulator in src/simulate.ts (see src/balance.test.ts): a
  * player buying greedily fills the first drive in ~25 min and the first
- * building in ~1.5 h, then slows down — the point where prestige will come in.
+ * building in ~1.5 h, then slows down. From there, Insight from the Reading
+ * Room's puzzles (src/puzzles.ts, src/insight.ts) carries the run on, with no reset.
  */
 export const TIERS: Tier[] = [
   { id: 'writer',     name: 'Writer',     baseCost: 10,          costGrowth: 1.15, rate: 0 },
@@ -46,9 +47,9 @@ export function getSpeedCost(level: number): Decimal {
   return D(SPEED_BASE_COST).mul(D(SPEED_COST_GROWTH).pow(level)).mul(D(SPEED_COST_ACCEL).pow(level * level));
 }
 
-/** Output multiplier from `level` levels of "Faster". */
-export function getSpeedMultiplier(level: number): Decimal {
-  return D(SPEED_MULTIPLIER).pow(level);
+/** Output multiplier from `level` levels of "Faster", each worth `perLevel`. */
+export function getSpeedMultiplier(level: number, perLevel: number = SPEED_MULTIPLIER): Decimal {
+  return D(perLevel).pow(level);
 }
 
 /**
@@ -77,6 +78,12 @@ export function createInitialState(): GameState {
     searchesFound: 0,
     boostSeconds: 0,
     upgrades: [],
+    insight: 0,
+    puzzlesSolved: [],
+    puzzlesFailed: [],
+    puzzleGuesses: {},
+    insightUpgrades: {},
+    automation: {},
   };
 }
 

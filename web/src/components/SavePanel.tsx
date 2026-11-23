@@ -1,7 +1,7 @@
 import { Show, createSignal, onFlush, onSettled, snapshot, useContext } from 'solid-js';
 import type { Autosave } from '@game/store';
 import type { GameState } from '@game/types';
-import { clearSave, exportSave, importSave } from '@game/save';
+import { exportSave, importSave } from '@game/save';
 import { GameContext } from '../game';
 
 /** How long "Reset" waits for the confirming second click. */
@@ -63,7 +63,8 @@ export function SavePanel(props: { autosave: Autosave; loadError?: string | null
       return;
     }
     setConfirmReset(false);
-    clearSave();
+    // Another tab saved since we loaded: halt (the notice takes over) rather than wipe its progress
+    if (!props.autosave.clear()) return;
     game.reset();
     setExported(null);
     saveAfterFlush('Game reset');

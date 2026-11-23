@@ -1,0 +1,9 @@
+{
+  "name": "verify-babel-harness",
+  "private": true,
+  "type": "module",
+  "description": "Verification harness for the Library of Babel web UI (not part of the app build)",
+  "dependencies": {
+    "puppeteer-core": "25.18.1"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "savedAt": 0,
+  "state": {
+    "pagesGenerated": "100000000",
+    "currentPage": "100000000",
+    "money": [1, 9],
+    "workers": {
+      "writer": [2.5, 1],
+      "manager": [0, 0],
+      "overseer": [0, 0],
+      "rector": [0, 0],
+      "cardinal": [0, 0],
+      "pope": [0, 0],
+      "archbishop": [0, 0]
+    },
+    "playerWorkers": { "writer": 25, "manager": 0, "overseer": 0, "rector": 0, "cardinal": 0, "pope": 0, "archbishop": 0 },
+    "log": [],
+    "fractionalPages": 0,
+    "speedLevel": 0,
+    "time": 600,
+    "achievements": [],
+    "searches": 0,
+    "searchesFound": 0,
+    "boostSeconds": 0,
+    "upgrades": []
+  }
+}

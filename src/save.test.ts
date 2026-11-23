@@ -56,6 +56,12 @@ function sampleState(): GameState {
   s.searchesFound = 1;
   s.boostSeconds = 12.5;
   s.upgrades.push('writer-25', 'fill-hardDrive');
+  s.insight = 7;
+  s.puzzlesSolved.push('babel');
+  s.puzzlesFailed.push('codex');
+  s.puzzleGuesses = { babel: ['lebba', 'babel'], shelf: ['slhfe'] };
+  s.insightUpgrades = { lucidity: 2, clerks: 1 };
+  s.automation = { 'hire-writer': false, speed: true };
   return s;
 }
 
@@ -79,6 +85,34 @@ describe('save — round trip', () => {
     assert.equal(back.searchesFound, 1);
     assert.equal(back.boostSeconds, 12.5);
     assert.deepEqual(back.upgrades, ['writer-25', 'fill-hardDrive']);
+    assert.equal(back.insight, 7);
+    assert.deepEqual(back.puzzlesSolved, ['babel']);
+    assert.deepEqual(back.puzzlesFailed, ['codex']);
+    assert.deepEqual(back.puzzleGuesses, s.puzzleGuesses);
+    assert.deepEqual(back.insightUpgrades, s.insightUpgrades);
+    assert.deepEqual(back.automation, s.automation);
+  });
+
+  it('drops bad Reading Room data, keeping the rest', () => {
+    const back = hydrate({
+      insight: -3,
+      puzzlesSolved: ['babel', 'nope', 3, 'babel'],
+      puzzlesFailed: ['babel', 'codex', 'nope'],
+      puzzleGuesses: { babel: ['babel', 'label', 7, 'lebba', 'lebba', 'lebba', 'lebba', 'lebba'], nope: ['x'], shelf: 'slhfe' },
+      insightUpgrades: { lucidity: 2.5, clerks: 9, haste: 2, bogus: 1 },
+      automation: { 'hire-writer': 'no', upgrades: false, bogus: true },
+    });
+    assert.equal(back.insight, 0);
+    assert.deepEqual(back.puzzlesSolved, ['babel']);
+    assert.deepEqual(back.puzzlesFailed, ['codex'], 'solved wins over lost');
+    assert.deepEqual(back.puzzleGuesses, { babel: ['babel', 'lebba', 'lebba', 'lebba', 'lebba'] }, 'at most MAX_GUESSES');
+    assert.deepEqual(back.insightUpgrades, { clerks: 1, haste: 2 });
+    assert.deepEqual(back.automation, { upgrades: false });
+  });
+
+  it('lets Long Memory hold more offline boost', () => {
+    const back = hydrate({ boostSeconds: 1e9, insightUpgrades: { 'long-memory': 1 } });
+    assert.equal(back.boostSeconds, OFFLINE_BOOST_MAX_SECONDS * 2);
   });
 
   it('keeps savedAt and the version', () => {
@@ -127,8 +161,14 @@ describe('save — v1 fixture (old saves must keep loading)', () => {
     assert.equal(s.searches, 4);
     assert.equal(s.searchesFound, 1);
     assert.equal(s.boostSeconds, 90);
-    // Upgrades were added after this save was made
+    // Upgrades and the Reading Room were added after this save was made
     assert.deepEqual(s.upgrades, []);
+    assert.equal(s.insight, 0);
+    assert.deepEqual(s.puzzlesSolved, []);
+    assert.deepEqual(s.puzzlesFailed, []);
+    assert.deepEqual(s.puzzleGuesses, {});
+    assert.deepEqual(s.insightUpgrades, {});
+    assert.deepEqual(s.automation, {});
   });
 });
 

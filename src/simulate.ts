@@ -1,8 +1,9 @@
-import { STORAGE_TIERS, TIERS, createInitialState, getSpeedCost, getWorkerCost } from './config.js';
+import { STORAGE_TIERS, TIERS, createInitialState } from './config.js';
 import { checkAchievements } from './achievements.js';
-import { advance, buySpeed, buyWorkers } from './economy.js';
-import { availableUpgrades, buyUpgrade } from './upgrades.js';
-import type { Decimal } from './bignum.js';
+import { advance } from './economy.js';
+import { buyGreedily } from './automation.js';
+import { INSIGHT_UPGRADES, buyInsightUpgrade, insightCost, insightLevel, isMaxed } from './insight.js';
+import { submitGuess, unlockedPuzzles } from './puzzles.js';
 import type { GameState } from './types.js';
 
 /**
@@ -28,6 +29,8 @@ export interface SimulationResult {
   filled: Record<string, Milestone>;
   /** Achievement id → minutes when it unlocked. */
   achievements: Record<string, number>;
+  /** Puzzle id → minutes when it was solved (only with `solvePuzzles`). */
+  solved: Record<string, number>;
   final: GameState;
 }
 
@@ -36,12 +39,32 @@ const CAPACITY: [string, bigint][] = (() => {
   return STORAGE_TIERS.map(tier => [tier.id, (pages *= tier.multiplier)] as [string, bigint]);
 })();
 
-export function simulate({ minutes, stepSeconds = 1 }: { minutes: number; stepSeconds?: number }): SimulationResult {
+/**
+ * `solvePuzzles`: also solve each puzzle the moment it turns up and spend
+ * Insight greedily on the cheapest power or systems upgrade (automation adds
+ * nothing for a player who already buys everything).
+ */
+export function simulate({
+  minutes,
+  stepSeconds = 1,
+  solvePuzzles = false,
+}: {
+  minutes: number;
+  stepSeconds?: number;
+  solvePuzzles?: boolean;
+}): SimulationResult {
   const s = createInitialState();
   const filled: Record<string, Milestone> = {};
+  const solved: Record<string, number> = {};
 
   while (s.time < minutes * 60) {
     advance(s, stepSeconds);
+    if (solvePuzzles) {
+      for (const p of unlockedPuzzles(s)) {
+        if (!(p.id in solved) && submitGuess(s, p.id, p.word).ok) solved[p.id] = s.time / 60;
+      }
+      spendInsight(s);
+    }
     buyGreedily(s);
     checkAchievements(s);
 
@@ -58,28 +81,13 @@ export function simulate({ minutes, stepSeconds = 1 }: { minutes: number; stepSe
   }
 
   const achievements = Object.fromEntries(s.achievements.map(a => [a.id, a.at / 60]));
-  return { filled, achievements, final: s };
+  return { filled, achievements, solved, final: s };
 }
 
-function buyGreedily(s: GameState): void {
+function spendInsight(s: GameState): void {
   for (;;) {
-    let cheapest: { cost: Decimal; buy: () => void } | null = null;
-    for (const tier of TIERS) {
-      const cost = getWorkerCost(tier, s.playerWorkers[tier.id] ?? 0);
-      if (cost.lte(s.money) && (!cheapest || cost.lt(cheapest.cost))) {
-        cheapest = { cost, buy: () => buyWorkers(s, tier.id, 1) };
-      }
-    }
-    const speedCost = getSpeedCost(s.speedLevel);
-    if (speedCost.lte(s.money) && (!cheapest || speedCost.lt(cheapest.cost))) {
-      cheapest = { cost: speedCost, buy: () => buySpeed(s) };
-    }
-    for (const upgrade of availableUpgrades(s)) {
-      if (upgrade.cost.lte(s.money) && (!cheapest || upgrade.cost.lt(cheapest.cost))) {
-        cheapest = { cost: upgrade.cost, buy: () => buyUpgrade(s, upgrade.id) };
-      }
-    }
-    if (!cheapest) return;
-    cheapest.buy();
+    const options = INSIGHT_UPGRADES.filter(u => u.group !== 'automation' && !isMaxed(s, u));
+    const cheapest = options.sort((a, b) => insightCost(a, insightLevel(s, a.id)) - insightCost(b, insightLevel(s, b.id)))[0];
+    if (!cheapest || buyInsightUpgrade(s, cheapest.id) === null) return;
   }
 }

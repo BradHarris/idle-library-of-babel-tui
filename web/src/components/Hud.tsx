@@ -1,5 +1,4 @@
 import { Show, useContext } from 'solid-js';
-import { OFFLINE_BOOST_MULTIPLIER } from '@game/config';
 import { formatClock, formatCount, formatMoney, formatMultiplier, formatRate } from '@game/format';
 import { GameContext } from '../game';
 import { SearchDialog } from './SearchDialog';
@@ -8,7 +7,7 @@ export function Hud() {
   const game = useContext(GameContext);
 
   return (
-    <header class="sticky top-0 z-20 border-b border-rule bg-paper/90 backdrop-blur pt-[env(safe-area-inset-top)]">
+    <header class="border-b border-rule bg-paper/90 backdrop-blur pt-[env(safe-area-inset-top)]">
       <div class="mx-auto max-w-6xl px-4 py-3">
         <div class="flex items-center justify-between">
           <h1 class="font-serif text-lg italic tracking-wide md:text-xl">The Library of Babel</h1>
@@ -29,7 +28,12 @@ export function Hud() {
             </Show>
             <Show when={game.boost().active}>
               <span data-stat="boost" class="ml-1 text-accent" title="Offline boost, banked from time away">
-                · {OFFLINE_BOOST_MULTIPLIER}× boost {formatClock(game.boost().secondsLeft)}
+                · {game.boost().multiplier}× boost {formatClock(game.boost().secondsLeft)}
+              </span>
+            </Show>
+            <Show when={game.unlockedPuzzles().length > 0 || game.state.insight > 0}>
+              <span data-stat="insight" class="ml-1" title="Insight, earned by solving puzzles">
+                · ✦ {formatCount(game.state.insight)} insight
               </span>
             </Show>
           </span>

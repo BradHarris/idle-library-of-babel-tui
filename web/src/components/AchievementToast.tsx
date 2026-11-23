@@ -20,7 +20,7 @@ export function AchievementToast() {
   return (
     <div
       aria-live="polite"
-      class="pointer-events-none fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 flex flex-col items-center gap-2 px-4 lg:top-28 lg:right-6 lg:bottom-auto lg:left-auto lg:items-end"
+      class="pointer-events-none fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 flex flex-col items-center gap-2 px-4 lg:top-48 lg:right-6 lg:bottom-auto lg:left-auto lg:items-end"
     >
       <For each={recent()}>
         {id => (

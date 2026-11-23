@@ -9,7 +9,7 @@ export function LogPanel() {
   return (
     <div>
       <h2 class="section-title mb-2">Log</h2>
-      <ul class="divide-y divide-rule border-y border-rule text-sm lg:max-h-64 lg:overflow-y-auto">
+      <ul class="divide-y divide-rule border-y border-rule text-sm">
         <For
           each={newestFirst()}
           fallback={<li class="py-2 text-ink-muted italic">Starting up…</li>}

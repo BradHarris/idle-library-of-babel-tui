@@ -548,7 +548,7 @@ describe('Game Engine — Offline boost', () => {
     const base = get().pps;
     game.bankOffline(20); // 2s of boost
     assert.strictEqual(get().pps, base * OFFLINE_BOOST_MULTIPLIER);
-    assert.deepStrictEqual(game.boost(), { active: true, secondsLeft: 2 });
+    assert.deepStrictEqual(game.boost(), { active: true, secondsLeft: 2, multiplier: OFFLINE_BOOST_MULTIPLIER });
 
     // A 3s tick crosses the end: 2 boosted seconds (×10) + 1 normal second
     game.tick(3000);
@@ -557,7 +557,7 @@ describe('Game Engine — Offline boost', () => {
     assert.strictEqual(s.boostSeconds, 0);
     // Writing pages unlocked "First Words" (+2%); the boost itself is gone from the multiplier
     assert.strictEqual(game.globalMultiplier().toNumber(), game.achievementMultiplier().toNumber());
-    assert.deepStrictEqual(game.boost(), { active: false, secondsLeft: 0 });
+    assert.deepStrictEqual(game.boost(), { active: false, secondsLeft: 0, multiplier: OFFLINE_BOOST_MULTIPLIER });
   });
 
   it('welcomeBack banks boost on a plain state before it goes into a store', () => {

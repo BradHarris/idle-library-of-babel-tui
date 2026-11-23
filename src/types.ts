@@ -79,6 +79,18 @@ export interface GameState {
   boostSeconds: number;
   /** Bought upgrade ids, in purchase order. */
   upgrades: string[];
+  /** Insight: the Reading Room's currency, earned by solving puzzles. */
+  insight: number;
+  /** Solved puzzle ids, in solve order. */
+  puzzlesSolved: string[];
+  /** Lost puzzle ids (out of guesses, or given up), in order. They never come back. */
+  puzzlesFailed: string[];
+  /** Guesses made so far per puzzle, oldest first. */
+  puzzleGuesses: Record<string, string[]>;
+  /** Level of each Insight upgrade bought (missing: 0). */
+  insightUpgrades: Record<string, number>;
+  /** Automation switches the player turned off (missing or true: on). */
+  automation: Record<string, boolean>;
 }
 
 // ─── Search ───────────────────────────────────────────────

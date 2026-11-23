@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createUniqueId, useContext } from 'solid-js';
-import { formatPageNumber } from '@game/format';
+import { formatCount, formatPageNumber } from '@game/format';
 import { generatePage } from '@game/page';
 import {
   MIN_LEVEL,
@@ -21,7 +21,7 @@ import {
 import { Dynamic, type JSX } from '@solidjs/web';
 import { GameContext } from '../game';
 import { UiContext } from '../ui';
-import { cellAt, skinFor, stageRect, type CellState } from './mapSkins';
+import { cellAt, cellGeometry, skinFor, stageRect, type CellState } from './mapSkins';
 
 const ZOOM_MS = 380;
 
@@ -52,7 +52,32 @@ export function StorageMap() {
   const skin = createMemo(() => skinFor(view().level));
   /** Per-container variety for the drawings. */
   const seed = createMemo(() => Number(view().index % 100_003n));
-  const cellIndices = createMemo(() => Array.from({ length: layout().cells }, (_, i) => i));
+  /**
+   * What the grid is drawn with: the skin's Cell and the grid's shape. Levels
+   * that share both (the plain grids below the drive) count as one drawing.
+   * A new drawing remounts the grid in one pass (the keyed <Show> below)
+   * rather than swapping a thousand Dynamic cells one by one; within a
+   * drawing, rows are reused by index (sideways steps while following, and
+   * containers with a different number of cells).
+   */
+  const drawing = createMemo(
+    () => {
+      const { level } = view();
+      const { cols, rows } = layout();
+      const { Cell, frame } = skinFor(level);
+      return { Cell, level, shape: `${cols}x${rows}:${frame.x},${frame.y},${frame.w},${frame.h}` };
+    },
+    { equals: (a, b) => a.Cell === b.Cell && a.shape === b.shape }
+  );
+  /** Cell geometry for the current drawing and cell count, as plain values. */
+  const cellList = createMemo(
+    () => {
+      const d = drawing();
+      // A ragged container uses only the first cells of its level's grid
+      return { drawing: d, cells: cellGeometry(d.level).slice(0, layout().cells) };
+    },
+    { equals: (a, b) => a.drawing === b.drawing && a.cells.length === b.cells.length }
+  );
   const fullCells = createMemo(() => fill().full);
   const filling = createMemo(() => fill().partial > 0 && fill().full < layout().cells);
   const cellState = (i: number): CellState =>
@@ -83,7 +108,7 @@ export function StorageMap() {
     const { level } = view();
     if (level === MIN_LEVEL) return '';
     const child = levelName(level - 1).toLowerCase();
-    const pages = level - 1 === MIN_LEVEL ? '' : ` (${formatPageNumber(layout().pagesPerCell)} pages)`;
+    const pages = level - 1 === MIN_LEVEL ? '' : ` (${formatCount(layout().pagesPerCell)} pages)`;
     return `each cell is one ${child}${pages}`;
   });
 
@@ -229,26 +254,26 @@ export function StorageMap() {
           <Show when={!isPage()} fallback={<PageCell view={view()} pagesGenerated={game.state.pagesGenerated} target={targetCell() !== null} />}>
           <svg viewBox="0 0 100 100" class="absolute inset-0 size-full">
             <Dynamic component={skin().Backdrop} uid={id} seed={seed()} layout={layout()} />
-            <For each={cellIndices()}>
-              {i => {
-                const r = createMemo(() => stageRect(view().level, i));
-                return (
-                  <Dynamic
-                    component={skin().Cell}
-                    x={r().x * 100}
-                    y={r().y * 100}
-                    w={r().w * 100}
-                    h={r().h * 100}
-                    col={i % layout().cols}
-                    row={Math.floor(i / layout().cols)}
-                    index={i}
-                    state={cellState(i)}
-                    seed={seed()}
-                    uid={id}
-                  />
-                );
-              }}
-            </For>
+            <Show when={drawing()} keyed>
+              {d => (
+                <For each={cellList().cells} keyed={false}>
+                  {(cell, i) => (
+                    <d.Cell
+                      x={cell().x}
+                      y={cell().y}
+                      w={cell().w}
+                      h={cell().h}
+                      col={cell().col}
+                      row={cell().row}
+                      index={i}
+                      state={cellState(i)}
+                      seed={seed()}
+                      uid={id}
+                    />
+                  )}
+                </For>
+              )}
+            </Show>
             <Show when={skin().Overlay}>
               {overlay => <Dynamic component={overlay()} uid={id} seed={seed()} layout={layout()} />}
             </Show>
@@ -258,10 +283,18 @@ export function StorageMap() {
             <Show when={frontierCell() !== null}>
               <Marker rect={stageRect(view().level, frontierCell()!)} class="stroke-ink-muted" dashed />
             </Show>
-            <Show when={targetCell() !== null}>
-              <Marker rect={stageRect(view().level, targetCell()!)} class="animate-pulse stroke-accent" />
-            </Show>
           </svg>
+          {/*
+            Pulses live in HTML over the SVG, not inside it: animating an SVG
+            child repaints the whole drawing (a thousand cells) every frame,
+            while an HTML element's opacity animates on the compositor.
+          */}
+          <Show when={filling()}>
+            <Pulse rect={stageRect(view().level, fullCells())} class="bg-accent/40" />
+          </Show>
+          <Show when={targetCell() !== null}>
+            <Pulse rect={stageRect(view().level, targetCell()!)} class="border-2 border-accent" target />
+          </Show>
           </Show>
         </div>
       </div>
@@ -334,6 +367,23 @@ function ProgressBar(props: { rect: CellRect; fraction: number }) {
       width={Math.max(0.4, props.rect.w * 100 * props.fraction)}
       height={h()}
       class="fill-accent"
+    />
+  );
+}
+
+/** A pulsing highlight over one cell (positions are fractions of the stage). */
+function Pulse(props: { rect: CellRect; class: string; target?: boolean }) {
+  return (
+    <div
+      aria-hidden="true"
+      data-map-pulse={props.target ? 'target' : 'writing'}
+      class={['pointer-events-none absolute animate-pulse rounded-[1px]', props.class]}
+      style={{
+        left: `${props.rect.x * 100}%`,
+        top: `${props.rect.y * 100}%`,
+        width: `${props.rect.w * 100}%`,
+        height: `${props.rect.h * 100}%`,
+      }}
     />
   );
 }

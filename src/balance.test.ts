@@ -1,9 +1,10 @@
 import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { simulate, type SimulationResult } from './simulate.js';
+import { PUZZLES } from './puzzles.js';
 
 /**
- * Pacing targets for one run (no prestige yet), for a greedy player who
+ * Pacing targets for one run, for a greedy player who
  * also buys upgrades: the first drive in ~10-30 min, the first building in
  * ~30-70 min, a city within a few hours, then a plateau. If a tuning change breaks these, re-check the curve before
  * loosening them.
@@ -11,6 +12,9 @@ import { simulate, type SimulationResult } from './simulate.js';
 
 let fiveHours: SimulationResult;
 const run = () => (fiveHours ??= simulate({ minutes: 5 * 60, stepSeconds: 2 }));
+let reading: SimulationResult;
+/** The same player, also solving every puzzle the moment it turns up and spending the Insight. */
+const readingRun = () => (reading ??= simulate({ minutes: 5 * 60, stepSeconds: 2, solvePuzzles: true }));
 
 describe('balance', () => {
   it('fills the first drive in 10-30 minutes', () => {
@@ -52,5 +56,30 @@ describe('balance', () => {
     assert.ok(achievements['pages-1']! < 0.1);
     assert.ok(achievements['writers-room']! < 5, `writers' room at ${achievements['writers-room']} min`);
     assert.ok(achievements['hire-manager']! < 5, `first manager at ${achievements['hire-manager']} min`);
+  });
+});
+
+describe('balance — Reading Room', () => {
+  const firstSolve = (length: number) =>
+    Math.min(...PUZZLES.filter(p => p.length === length).map(p => readingRun().solved[p.id] ?? Infinity));
+
+  it('turns up the first puzzle within 5-20 minutes', () => {
+    const first = firstSolve(5);
+    assert.ok(first >= 5 && first <= 20, `first puzzle at ${first.toFixed(1)} min`);
+  });
+
+  it('spreads the words over hours: the longest is still ahead after 3 hours', () => {
+    assert.ok(firstSolve(12) <= 60, `12 letters at ${firstSolve(12).toFixed(1)} min`);
+    const last = Math.max(...Object.values(readingRun().solved));
+    assert.ok(last >= 180, `last word at ${last.toFixed(1)} min`);
+  });
+
+  it('carries the run past the old plateau, but not too fast', () => {
+    const { filled } = readingRun();
+    assert.ok(filled.city!.minutes < run().filled.city!.minutes, 'a city sooner than without puzzles');
+    assert.ok(filled.building!.minutes >= 20, `building at ${filled.building!.minutes.toFixed(1)} min`);
+    assert.ok(filled.planet, 'a planet within 5 hours');
+    assert.ok(filled.planet.minutes >= 150, `planet at ${filled.planet.minutes.toFixed(1)} min`);
+    assert.strictEqual(filled.galaxy, undefined);
   });
 });

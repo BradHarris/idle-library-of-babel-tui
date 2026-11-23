@@ -17,7 +17,7 @@ import { MIN_LEVEL, TOP_LEVEL, levelId, type MapView } from '@game/storageMap';
  * Anything malformed falls back to its default, so a bad link never breaks the app.
  */
 
-export const TABS = ['workers', 'upgrades', 'library', 'log'] as const;
+export const TABS = ['workers', 'upgrades', 'puzzles', 'library', 'log', 'achievements', 'settings'] as const;
 export type Tab = (typeof TABS)[number];
 export const DEFAULT_TAB: Tab = 'workers';
 

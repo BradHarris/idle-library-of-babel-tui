@@ -50,6 +50,43 @@ export function stageRect(level: number, cell: number): CellRect {
   return { x: frame.x + r.x * frame.w, y: frame.y + r.y * frame.h, w: r.w * frame.w, h: r.h * frame.h };
 }
 
+/** A cell's bounds in viewBox units (0..100) and its grid position. */
+export interface CellGeometry {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  col: number;
+  row: number;
+}
+
+const GEOMETRY = new Map<number, readonly CellGeometry[]>();
+
+/**
+ * Every cell's geometry at `level`. It depends only on the level, so it is
+ * computed once (skin and layout looked up once, not per cell) and cached.
+ */
+export function cellGeometry(level: number): readonly CellGeometry[] {
+  let cells = GEOMETRY.get(level);
+  if (!cells) {
+    const { frame } = skinFor(level);
+    const layout = gridLayout(level);
+    cells = Array.from({ length: layout.cells }, (_, i) => {
+      const r = cellRect(layout, i);
+      return {
+        x: (frame.x + r.x * frame.w) * 100,
+        y: (frame.y + r.y * frame.h) * 100,
+        w: r.w * frame.w * 100,
+        h: r.h * frame.h * 100,
+        col: i % layout.cols,
+        row: Math.floor(i / layout.cols),
+      };
+    });
+    GEOMETRY.set(level, cells);
+  }
+  return cells;
+}
+
 /** Which cell (if any) is under a point given as fractions of the stage. */
 export function cellAt(level: number, layout: GridLayout, fx: number, fy: number): number | null {
   const { frame } = skinFor(level);
@@ -74,7 +111,7 @@ export function hash(a: number, b = 0): number {
 
 const LED: Record<CellState, string> = {
   full: 'fill-led',
-  partial: 'animate-pulse fill-accent',
+  partial: 'fill-accent',
   empty: 'fill-rule',
 };
 
@@ -372,7 +409,7 @@ const BuildingSkin: Skin = {
       <rect x={31} y={6} width={38} height={1.6} class="fill-ink/60" />
       <rect x={38} y={3.6} width={9} height={2.4} class="fill-ink/40" />
       <line x1={58} x2={58} y1={0.8} y2={6} class="stroke-ink/60" stroke-width={0.4} />
-      <circle cx={58} cy={0.9} r={0.6} class="animate-pulse fill-accent" />
+      <circle cx={58} cy={0.9} r={0.6} class="fill-accent" />
       {/* Entrance canopy */}
       <rect x={44} y={94.1} width={12} height={0.9} class="fill-ink/70" />
     </>
@@ -480,7 +517,7 @@ const ProvinceSkin: Skin = {
         cx={p.x + p.w / 2}
         cy={p.y + p.h / 2}
         r={Math.min(p.w, p.h) * size()}
-        class={{ empty: 'fill-ink/20', partial: 'animate-pulse fill-accent', full: 'fill-ink' }[p.state]}
+        class={{ empty: 'fill-ink/20', partial: 'fill-accent', full: 'fill-ink' }[p.state]}
       />
     );
   },
@@ -495,30 +532,44 @@ function isLand(col: number, row: number, seed: number): boolean {
   return n > 0.5;
 }
 
+const PLANET_FRAME: CellRect = { x: 0.03, y: 0.27, w: 0.94, h: 0.46 };
+
+/** Every land cell as one path (one element, not one per cell). */
+function landPath(layout: GridLayout, seed: number): string {
+  let d = '';
+  for (let i = 0; i < layout.cells; i++) {
+    const col = i % layout.cols;
+    const row = Math.floor(i / layout.cols);
+    if (!isLand(col, row, seed)) continue;
+    const r = cellRect(layout, i);
+    const x = (PLANET_FRAME.x + r.x * PLANET_FRAME.w) * 100;
+    const y = (PLANET_FRAME.y + r.y * PLANET_FRAME.h) * 100;
+    // A hair oversized so neighbouring tiles join up
+    d += `M${x.toFixed(2)} ${y.toFixed(2)}h${(r.w * PLANET_FRAME.w * 100 + 0.05).toFixed(2)}v${(r.h * PLANET_FRAME.h * 100 + 0.05).toFixed(2)}h${(-(r.w * PLANET_FRAME.w * 100 + 0.05)).toFixed(2)}z`;
+  }
+  return d;
+}
+
 const PlanetSkin: Skin = {
-  frame: { x: 0.03, y: 0.27, w: 0.94, h: 0.46 },
-  Backdrop: () => (
+  frame: PLANET_FRAME,
+  Backdrop: p => (
     <>
       {/* A moon */}
       <circle cx={88} cy={11} r={4.5} class="fill-rule/50" />
       <circle cx={86.5} cy={10} r={0.8} class="fill-rule" />
       <rect x={2} y={26} width={96} height={48} rx={2} class="fill-water/35 stroke-ink/40" stroke-width={0.4} />
+      <path d={landPath(p.layout, p.seed)} class="fill-paper-deep" />
     </>
   ),
   Cell: p => {
     const r = () => Math.min(p.w, p.h) * ({ empty: 0.14, partial: 0.4, full: 0.36 }[p.state]);
     return (
-      <g>
-        <Show when={isLand(p.col, p.row, p.seed)}>
-          <rect x={p.x} y={p.y} width={p.w + 0.05} height={p.h + 0.05} class="fill-paper-deep" />
-        </Show>
-        <circle
-          cx={p.x + p.w / 2}
-          cy={p.y + p.h / 2}
-          r={r()}
-          class={{ empty: 'fill-ink/20', partial: 'animate-pulse fill-accent', full: 'fill-ink' }[p.state]}
-        />
-      </g>
+      <circle
+        cx={p.x + p.w / 2}
+        cy={p.y + p.h / 2}
+        r={r()}
+        class={{ empty: 'fill-ink/20', partial: 'fill-accent', full: 'fill-ink' }[p.state]}
+      />
     );
   },
 };
@@ -580,6 +631,58 @@ const SolarSystemSkin: Skin = {
 /** How a cell in a field is drawn: a star, a tilted galaxy, or a small clump of them. */
 type Mark = 'dot' | 'ellipse' | 'clump';
 
+type Density = (x: number, y: number) => number;
+
+/** Centre, size, opacity and fill for a field cell. */
+function fieldMark(p: CellProps, density: Density) {
+  const cx = () => p.x + p.w / 2;
+  const cy = () => p.y + p.h / 2;
+  const d = () => density(cx(), cy());
+  return {
+    cx,
+    cy,
+    size: () => Math.min(p.w, p.h) * (0.12 + 0.3 * d()),
+    opacity: () => (p.state === 'empty' ? 0.2 + 0.55 * d() : 0.45 + 0.55 * d()),
+    cls: () => ({ empty: 'fill-rule', partial: 'fill-accent', full: 'fill-ink' })[p.state],
+  };
+}
+
+const CLUMP = [0, 1, 2] as const;
+
+const FIELD_MARKS: Record<Mark, (density: Density) => Skin['Cell']> = {
+  dot: density => p => {
+    const m = fieldMark(p, density);
+    return <circle cx={m.cx()} cy={m.cy()} r={m.size()} opacity={m.opacity()} class={m.cls()} />;
+  },
+  ellipse: density => p => {
+    const m = fieldMark(p, density);
+    const angle = () => Math.round(hash(p.index, p.seed) * 180);
+    return (
+      <ellipse
+        cx={m.cx()}
+        cy={m.cy()}
+        rx={m.size() * 1.3}
+        ry={m.size() * 0.55}
+        transform={`rotate(${angle()} ${m.cx()} ${m.cy()})`}
+        opacity={m.opacity()}
+        class={m.cls()}
+      />
+    );
+  },
+  clump: density => p => {
+    const m = fieldMark(p, density);
+    // Three circles as one path: a quarter of the elements of a <g> of circles
+    const d = () =>
+      CLUMP.map(k => {
+        const cx = m.cx() + (hash(p.index, p.seed + k) - 0.5) * p.w * 0.5;
+        const cy = m.cy() + (hash(p.index, p.seed + k + 7) - 0.5) * p.h * 0.5;
+        const r = m.size() * (k === 0 ? 0.8 : 0.5);
+        return `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
+      }).join('');
+    return <path d={d()} opacity={m.opacity()} class={m.cls()} />;
+  },
+};
+
 /**
  * A field skin: every cell is a mark whose size and brightness follow
  * `density` (0..1 at a point in viewBox units), so the grid reads as a
@@ -593,36 +696,9 @@ function fieldSkin(opts: {
   return {
     frame: { x: 0.02, y: 0.02, w: 0.96, h: 0.96 },
     Backdrop: opts.Backdrop,
-    Cell: p => {
-      const cx = () => p.x + p.w / 2;
-      const cy = () => p.y + p.h / 2;
-      const d = () => opts.density(cx(), cy());
-      const size = () => Math.min(p.w, p.h) * (0.12 + 0.3 * d());
-      const opacity = () => (p.state === 'empty' ? 0.2 + 0.55 * d() : 0.45 + 0.55 * d());
-      const cls = () => ({ empty: 'fill-rule', partial: 'animate-pulse fill-accent', full: 'fill-ink' })[p.state];
-      const angle = () => Math.round(hash(p.index, p.seed) * 180);
-      return (
-        <g opacity={opacity()} class={cls()}>
-          <Show when={opts.mark === 'dot'}>
-            <circle cx={cx()} cy={cy()} r={size()} />
-          </Show>
-          <Show when={opts.mark === 'ellipse'}>
-            <ellipse cx={cx()} cy={cy()} rx={size() * 1.3} ry={size() * 0.55} transform={`rotate(${angle()} ${cx()} ${cy()})`} />
-          </Show>
-          <Show when={opts.mark === 'clump'}>
-            <For each={[0, 1, 2]}>
-              {k => (
-                <circle
-                  cx={cx() + (hash(p.index, p.seed + k) - 0.5) * p.w * 0.5}
-                  cy={cy() + (hash(p.index, p.seed + k + 7) - 0.5) * p.h * 0.5}
-                  r={size() * (k === 0 ? 0.8 : 0.5)}
-                />
-              )}
-            </For>
-          </Show>
-        </g>
-      );
-    },
+    // The mark is fixed per skin, so pick its shape once here rather than
+    // branching in every cell (a thousand <Show>s made zooming slow)
+    Cell: FIELD_MARKS[opts.mark](opts.density),
   };
 }
 

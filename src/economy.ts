@@ -1,6 +1,13 @@
-import { EARNINGS_PER_PAGE, OFFLINE_BOOST_MAX_SECONDS, OFFLINE_BOOST_MULTIPLIER, TIERS, getAffordable, getDoublingMultiplier, getSpeedCost, getSpeedMultiplier } from './config.js';
+import { EARNINGS_PER_PAGE, OFFLINE_BOOST_MULTIPLIER, TIERS, getAffordable, getDoublingMultiplier, getSpeedCost, getSpeedMultiplier } from './config.js';
 import { achievementMultiplier } from './achievements.js';
 import { upgradeGlobalMultiplier, upgradeTierMultiplier } from './upgrades.js';
+import {
+  achievementBonus,
+  insightBoostCap,
+  insightBoostMultiplier,
+  insightGlobalMultiplier,
+  speedFactor,
+} from './insight.js';
 import { Decimal } from './bignum.js';
 import type { GameState } from './types.js';
 
@@ -14,7 +21,7 @@ import type { GameState } from './types.js';
  * - every other tier makes workers of the tier directly below it:
  *   count × tier.rate × that tier's multiplier
  * - a tier's multiplier is its doubling bonus × its upgrades (tier and synergy)
- * - the global multiplier ("Faster" × achievements × global upgrades) applies to pages only,
+ * - the global multiplier ("Faster" × achievements × global upgrades × Insight) applies to pages only,
  *   so it scales output without compounding down the chain of tiers.
  */
 
@@ -26,23 +33,26 @@ export function tierMultiplier(s: GameState, tierId: string): number {
   return getDoublingMultiplier(s.playerWorkers[tierId] ?? 0) * upgradeTierMultiplier(s, tierId);
 }
 
-/** Output multiplier from "Faster", achievements, global upgrades and any offline boost. */
+/** Output multiplier from "Faster", achievements, global upgrades, Insight upgrades and any offline boost. */
 export function globalMultiplier(s: GameState): Decimal {
-  const base = getSpeedMultiplier(s.speedLevel)
-    .mul(achievementMultiplier(s.achievements.length))
-    .mul(upgradeGlobalMultiplier(s));
-  return s.boostSeconds > 0 ? base.mul(OFFLINE_BOOST_MULTIPLIER) : base;
+  const base = getSpeedMultiplier(s.speedLevel, speedFactor(s))
+    .mul(achievementMultiplier(s.achievements.length, achievementBonus(s)))
+    .mul(upgradeGlobalMultiplier(s))
+    .mul(insightGlobalMultiplier(s));
+  return s.boostSeconds > 0 ? base.mul(insightBoostMultiplier(s)) : base;
 }
 
 /**
  * Bank time away as offline boost: one boosted second per
- * OFFLINE_BOOST_MULTIPLIER seconds away, capped at OFFLINE_BOOST_MAX_SECONDS
- * in total. Mutates `s`; returns the seconds of boost added.
+ * OFFLINE_BOOST_MULTIPLIER seconds away, capped at insightBoostCap (an hour,
+ * more with Long Memory). Deep Focus raises the boost's multiplier but not the
+ * banking rate, so it makes time away worth more. Mutates `s`; returns the
+ * seconds of boost added.
  */
 export function bankOffline(s: GameState, awaySeconds: number): number {
   if (!(awaySeconds > 0)) return 0;
   const before = s.boostSeconds;
-  s.boostSeconds = Math.min(OFFLINE_BOOST_MAX_SECONDS, before + awaySeconds / OFFLINE_BOOST_MULTIPLIER);
+  s.boostSeconds = Math.min(insightBoostCap(s), before + awaySeconds / OFFLINE_BOOST_MULTIPLIER);
   return Math.max(0, s.boostSeconds - before);
 }
 
