@@ -32,18 +32,20 @@ export interface Puzzle {
   unlockPage: bigint;
   /** Insight for solving it. */
   reward: number;
-  /** Other real words with the same letters that also count as solved. */
-  alsoAccept: string[];
 }
 
-/** The answer words. Each entry may list other real anagrams that also count. */
-const WORDS: (string | [word: string, ...alsoAccept: string[]])[] = [
+/**
+ * The answer words. Only the word itself solves its puzzle: another real word from
+ * the same letters (chapter/patcher, words/sword) is just a wrong guess. The
+ * right-spot marks steer the player to the intended one.
+ */
+const WORDS: string[] = [
   // 5
-  'babel', 'shelf', 'codex', 'quill', 'folio', 'atlas', 'fable', 'quote', ['words', 'sword'], ['verse', 'serve', 'sever'],
+  'babel', 'shelf', 'codex', 'quill', 'folio', 'atlas', 'fable', 'quote', 'words', 'verse',
   // 6
-  'scribe', 'vellum', 'scroll', 'author', 'quarto', ['margin', 'arming'], 'glyphs', 'cipher', 'borges',
+  'scribe', 'vellum', 'scroll', 'author', 'quarto', 'margin', 'glyphs', 'cipher', 'borges',
   // 7
-  'library', ['chapter', 'patcher'], 'lexicon', 'archive', 'scholar', 'lantern', 'mirrors', 'volumes',
+  'library', 'chapter', 'lexicon', 'archive', 'scholar', 'lantern', 'mirrors', 'volumes',
   // 8
   'infinite', 'hexagons', 'alphabet', 'universe', 'notebook', 'symmetry', 'bookcase', 'vastness',
   // 9
@@ -88,8 +90,7 @@ export function scrambleOf(word: string): string {
 }
 
 /** Every puzzle, in the order it unlocks. */
-export const PUZZLES: Puzzle[] = WORDS.map(entry => {
-  const [word, ...alsoAccept] = typeof entry === 'string' ? [entry] : entry;
+export const PUZZLES: Puzzle[] = WORDS.map(word => {
   const scramble = scrambleOf(word);
   return {
     id: word,
@@ -98,7 +99,6 @@ export const PUZZLES: Puzzle[] = WORDS.map(entry => {
     scramble,
     unlockPage: queryToPageAddress(scramble),
     reward: insightForLength(word.length),
-    alsoAccept,
   };
 }).sort((a, b) => (a.unlockPage < b.unlockPage ? -1 : a.unlockPage > b.unlockPage ? 1 : 0));
 
@@ -158,7 +158,7 @@ export function isArrangement(p: Puzzle, guess: string): boolean {
 }
 
 export function isAnswer(p: Puzzle, guess: string): boolean {
-  return guess === p.word || p.alsoAccept.includes(guess);
+  return guess === p.word;
 }
 
 export type GuessResult =
@@ -170,8 +170,6 @@ export type GuessResult =
  * Submit a guess for puzzle `id`. Mutates `s` (pass a store draft). The guess
  * is recorded and paid for. A correct one marks the puzzle solved and credits
  * Insight. A wrong last guess loses the puzzle.
- * Correct spots are always scored against the main answer, even when an
- * `alsoAccept` word solves it.
  */
 export function submitGuess(s: GameState, id: string, guess: string): GuessResult {
   const p = BY_ID.get(id);

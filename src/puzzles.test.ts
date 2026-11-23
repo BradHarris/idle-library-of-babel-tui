@@ -52,17 +52,15 @@ describe('puzzles — the word list', () => {
   it('never gives the answer away as the scramble', () => {
     for (const p of PUZZLES) {
       assert.notStrictEqual(p.scramble, p.word);
-      for (const w of p.alsoAccept) assert.notStrictEqual(p.scramble, w, p.word);
     }
   });
 
-  it('has only lowercase words, no duplicate letter sets, and real anagrams for extra answers', () => {
+  it('has only lowercase words and no duplicate letter sets', () => {
     const scrambles = new Set<string>();
     for (const p of PUZZLES) {
       assert.match(p.word, /^[a-z]+$/);
       assert.ok(!scrambles.has(p.scramble), `two puzzles share the letters of ${p.word}`);
       scrambles.add(p.scramble);
-      for (const w of p.alsoAccept) assert.ok(isArrangement(p, w), `${w} is not an anagram of ${p.word}`);
     }
   });
 
@@ -160,11 +158,15 @@ describe('puzzles — rules', () => {
     assert.deepStrictEqual(s.puzzlesFailed, ['babel']);
   });
 
-  it('accepts listed anagrams', () => {
-    const p = PUZZLES.find(p => p.word === 'words')!;
+  it('only the intended word solves: another real anagram is a wrong guess', () => {
+    const p = PUZZLES.find(p => p.word === 'chapter')!;
     const s = withPages(p.unlockPage);
-    const r = submitGuess(s, p.id, 'sword');
-    assert.ok(r.ok && r.solved);
+    const r = submitGuess(s, p.id, 'patcher');
+    assert.ok(r.ok && !r.solved);
+    assert.deepStrictEqual(r.correct, scorePositions('patcher', 'chapter'));
+    assert.deepStrictEqual(s.puzzlesSolved, []);
+    const right = submitGuess(s, p.id, 'chapter');
+    assert.ok(right.ok && right.solved);
   });
 
   it('rejects locked puzzles and guesses that are not the given letters', () => {
